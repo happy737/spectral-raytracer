@@ -1,0 +1,14 @@
+[package]
+name = "eframe_raytracing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.31.0"
+env_logger = "0.11.6"
+egui_extras = {features = ["default", "image"], version = "0.31.0"}
+log = "0.4.26"
+image = "0.25.5"
+rfd = "0.15.2"
+threadpool = "1.8.1"
+nalgebra = "0.33.2"
