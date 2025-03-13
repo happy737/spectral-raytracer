@@ -43,7 +43,7 @@ impl Ray {
     fn new(origin: Point3<f32>, direction: Vector3<f32>, hit: bool) -> Ray {
         Ray {
             origin,
-            direction,
+            direction: direction.normalize(),
             hit,
             intensity: 0.0,
         }
@@ -74,6 +74,25 @@ impl Aabb {
             aabb_type: AABBType::PlainBox,
         }
     }
+    
+    pub fn new_sphere(center: &Point3<f32>, radius: f32) -> Aabb {
+        Aabb {
+            min: point![center.x - radius, center.y - radius, center.z - radius],
+            max: point![center.x + radius, center.y + radius, center.z + radius],
+            aabb_type: AABBType::Sphere,
+        }
+    }
+    
+    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32) -> Aabb {
+        let x_half = x_length / 2.0;
+        let y_half = y_length / 2.0;
+        let z_half = z_length / 2.0;
+        Aabb {
+            min: point![center.x - x_half, center.y - y_half, center.z - z_half],
+            max: point![center.x + x_half, center.y + y_half, center.z + z_half],
+            aabb_type: AABBType::PlainBox,
+        }
+    }
 }
 enum AABBType {
     PlainBox,
@@ -81,7 +100,7 @@ enum AABBType {
 }
 
 /// The ray generation shader. 
-pub fn shader_raytracing(pos: PixelPos, dim: Dimensions, uniforms: &RaytracingUniforms) -> (f32, f32, f32) {
+pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &RaytracingUniforms) -> (f32, f32, f32) {
     let x = pos.x as f32;
     let y = pos.y as f32;
     let width = dim.width as f32;
@@ -97,54 +116,119 @@ pub fn shader_raytracing(pos: PixelPos, dim: Dimensions, uniforms: &RaytracingUn
     (ray.intensity, ray.intensity, ray.intensity)
 }
 
-fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
-    for aabb in uniforms.aabbs.iter() {
-        if ray_aabb_intersection(ray, &aabb.min, &aabb.max) {
-            //TODO maybe this is already hit shader territory
-            match aabb.aabb_type {
-                AABBType::PlainBox => {
-                    ray.hit = true;
-                    ray.intensity = 1.0;
-                }
-                AABBType::Sphere => {
-                    let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
-                    let radius = aabb.max.x - sphere_pos.x;
-                    match ray_sphere_intersection(ray, &sphere_pos, radius) {
-                        SphereIntersection::NoIntersection => (),
-                        SphereIntersection::OneIntersection(t) => {
-                            ray.hit = true;
-                            let intersection_point = ray.origin + ray.direction * t;
-                            let normal = (intersection_point - sphere_pos).normalize();
-                            ray.intensity = ray.direction.dot(&normal).abs();
-                        }
-                        SphereIntersection::TwoIntersections(t1, t2) => {
-                            ray.hit = true;
-                            let t = t1.min(t2);
-                            let intersection_point = ray.origin + ray.direction * t;
-                            let normal = (intersection_point - sphere_pos).normalize();
-                            ray.intensity = ray.direction.dot(&normal).abs();
-                        }
-                    }
-                }
+fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
+    match aabb.aabb_type {
+        AABBType::Sphere => {
+            let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
+            let radius = aabb.max.x - sphere_pos.x;
+            match ray_sphere_intersection(ray, &sphere_pos, radius) {
+                SphereIntersection::NoIntersection => None,
+                SphereIntersection::OneIntersection(t) => Some(t),
+                SphereIntersection::TwoIntersections(t_1, t_2) => Some(t_1.min(t_2))
             }
+        }
+        AABBType::PlainBox => {
+            let (t1, t2) = ray_aabb_intersection(ray, &aabb.min, &aabb.max).unwrap();
+            Some(t1.min(t2))
+        }
+    }
+}
+
+fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms: &RaytracingUniforms) {
+    ray.hit = true;
+    
+    match aabb.aabb_type {
+        AABBType::PlainBox => {
+            ray.intensity = 1.0;
+        }
+        AABBType::Sphere => {
+            let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
+            let radius = aabb.max.x - sphere_pos.x;
+            let intersection_point = ray.origin + ray.direction * ray_intersection_length;
+            let normal = (intersection_point - sphere_pos).normalize();
+            ray.intensity = ray.direction.dot(&normal).abs();
+        }
+    }
+}
+
+fn miss_shader(ray: &mut Ray, uniforms: &RaytracingUniforms) {
+    ray.intensity = 0.0;
+    ray.hit = false;
+}
+
+fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
+    let mut intersections: Vec<(&Aabb, f32)> = Vec::new();
+    
+    for aabb in uniforms.aabbs.iter() {
+        if let Some((t_min, _t_max)) = ray_aabb_intersection(ray, &aabb.min, &aabb.max) {
+            if let Some(t) = intersection_shader(ray, aabb) {
+                intersections.push((aabb, t));
+            }
+            
+            //TODO maybe this is already hit/intersection shader territory
+            // match aabb.aabb_type {
+            //     AABBType::PlainBox => {
+            //         ray.hit = true;
+            //         ray.intensity = 1.0;
+            //     }
+            //     AABBType::Sphere => {
+            //         let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
+            //         let radius = aabb.max.x - sphere_pos.x;
+            //         match ray_sphere_intersection(ray, &sphere_pos, radius) {
+            //             SphereIntersection::NoIntersection => (),
+            //             SphereIntersection::OneIntersection(t) => {
+            //                 ray.hit = true;
+            //                 let intersection_point = ray.origin + ray.direction * t;
+            //                 let normal = (intersection_point - sphere_pos).normalize();
+            //                 ray.intensity = ray.direction.dot(&normal).abs();
+            //             }
+            //             SphereIntersection::TwoIntersections(t1, t2) => {
+            //                 ray.hit = true;
+            //                 let t = t1.min(t2);
+            //                 let intersection_point = ray.origin + ray.direction * t;
+            //                 let normal = (intersection_point - sphere_pos).normalize();
+            //                 ray.intensity = ray.direction.dot(&normal).abs();
+            //             }
+            //         }
+            //     }
+            // }
         }
     }
     
+    intersections.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
     
-    // match ray_sphere_intersection(ray, &sphere_pos, sphere_rad) {
-    //     SphereIntersection::NoIntersection => ray.hit = false,
-    //     SphereIntersection::OneIntersection(t) => {
-    //         ray.hit = true;
-    //         let intersection_point = ray.origin + ray.direction * t;
-    //         let normal = (intersection_point - sphere_pos).normalize();
-    //         ray.intensity = ray.direction.dot(&normal).abs();
-    //     }
-    //     SphereIntersection::TwoIntersections(t1, t2) => {
-    //         ray.hit = true;
-    //         let t = t1.min(t2);
-    //         let intersection_point = ray.origin + ray.direction * t;
-    //         let normal = (intersection_point - sphere_pos).normalize();
-    //         ray.intensity = ray.direction.dot(&normal).abs();
+    if let Some((aabb, t)) = intersections.first() {
+        hit_shader(ray, aabb, *t, uniforms);
+    } else {
+        miss_shader(ray, uniforms);
+    }
+    
+    // if let Some(aabb) = aabb_ref {
+    //     match aabb.aabb_type {
+    //         AABBType::PlainBox => {
+    //             ray.hit = true;
+    //             ray.intensity = 1.0;
+    //         }
+    //         AABBType::Sphere => {
+    //             let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
+    //             let radius = aabb.max.x - sphere_pos.x;
+    //             match ray_sphere_intersection(ray, &sphere_pos, radius) {
+    //                 SphereIntersection::NoIntersection => (),
+    //                 SphereIntersection::OneIntersection(t) => {
+    //                     ray.hit = true;
+    //                     let intersection_point = ray.origin + ray.direction * t;
+    //                     let normal = (intersection_point - sphere_pos).normalize();
+    //                     ray.intensity = ray.direction.dot(&normal).abs();
+    //                 }
+    //                 SphereIntersection::TwoIntersections(t1, t2) => {
+    //                     ray.hit = true;
+    //                     let t = t1.min(t2);
+    //                     let intersection_point = ray.origin + ray.direction * t;
+    //                     let normal = (intersection_point - sphere_pos).normalize();
+    //                     ray.intensity = ray.direction.dot(&normal).abs();
+    //                 }
+    //             }
+    //         }
     //     }
     // }
 }
@@ -176,7 +260,7 @@ fn ray_sphere_intersection(ray: &Ray, sphere_pos: &Point3<f32>, sphere_rad: f32)
     }
 }
 
-fn ray_aabb_intersection(ray: &Ray, point_min: &Point3<f32>, point_max: &Point3<f32>) -> bool {
+fn ray_aabb_intersection(ray: &Ray, point_min: &Point3<f32>, point_max: &Point3<f32>) -> Option<(f32, f32)> {
     let mut t_min = f32::NEG_INFINITY;
     let mut t_max = f32::INFINITY;
     
@@ -191,13 +275,13 @@ fn ray_aabb_intersection(ray: &Ray, point_min: &Point3<f32>, point_max: &Point3<
         t_max = t_max.min(t_far);
         
         if t_max <= t_min {
-            return false;
+            return None;
         }
     }
     
     if t_max < 0.0 {
-        return false;
+        return None;
     }
     
-    true    //t_min and t_max could potentially be returned here
+    Some((t_min, t_max)) 
 }

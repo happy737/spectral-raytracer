@@ -7,6 +7,7 @@ use eframe::egui;
 use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
 use image::{DynamicImage, GenericImage, ImageBuffer};
 use log::warn;
+use nalgebra::point;
 use threadpool::ThreadPool;
 use crate::shader::PixelPos;
 
@@ -143,8 +144,12 @@ impl App {
         }
         
         let uniforms = shader::RaytracingUniforms{aabbs: vec![
-            shader::Aabb::test_instance1(),
-            shader::Aabb::test_instance2(),
+            //shader::Aabb::test_instance1(),
+            //shader::Aabb::new_sphere(&point![0.0, 0.0, 2.0], 0.5),
+            shader::Aabb::new_box(&point![-0.5, 0.0, 0.0], 0.5, 1.0, 1.0),
+            shader::Aabb::new_sphere(&point![0.5, 0.0, 1.0], 0.5),
+            shader::Aabb::new_sphere(&point![0.0, 0.0, 1.0], 0.5),
+            //shader::Aabb::test_instance2(),
         ]};
         let uniforms_ref = Arc::new(uniforms);
         
@@ -164,8 +169,8 @@ impl App {
                 let mut row = Vec::<u8>::with_capacity((width * 3) as usize);
                 
                 for x in 0..width {
-                    let (r, g, b) = shader::shader_raytracing(PixelPos{x, y},
-                                                          shader::Dimensions {width, height}, &uniforms);
+                    let (r, g, b) = shader::ray_generation_shader(PixelPos{x, y},
+                                                                  shader::Dimensions {width, height}, &uniforms);
                     let (r, g, b) = ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8);
                     
                     row.push(r);
