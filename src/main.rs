@@ -1,5 +1,4 @@
 mod shader;
-mod hsb;
 
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
@@ -112,31 +111,6 @@ impl App {
         );
     }
     
-    fn apply_shader(&mut self, ctx: &egui::Context) {
-        if self.image_actual.is_none() {
-            return;
-        }
-        let now = Instant::now();
-        
-        let img = self.image_actual.as_mut().unwrap();
-        let width = img.width();
-        let height = img.height();
-        
-        for y in 0..height {
-            for x in 0..width {
-                let (r, g, b) = shader::shader_spiral(PixelPos{x, y},
-                                                      shader::Dimensions {width, height}, ());
-                let (r, g, b) = ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8);
-                
-                img.blend_pixel(x, y, image::Rgba::<u8>([r, g, b, 255]));
-            }
-        }
-        
-        self.ui_values.frame_gen_time = Some(now.elapsed());
-        
-        self.renew_texture_handle(ctx);
-    }
-    
     fn apply_shader2(&mut self, ctx: &egui::Context) {
         if self.image_actual.is_none() {
             warn!("Tried to apply shader, however no image is loaded!");
@@ -153,7 +127,7 @@ impl App {
             ],
             lights: vec![
                 shader::Light::new(point![0.0, 2.0, -1.0], 10.0),
-                shader::Light::new(point![0.0, 1_000.0, 0.0], 500_000.0),
+                shader::Light::new(point![0.0, 1_000.0, 0.0], 1_000_000.0),
             ],
             camera: shader::Camera::new(point![0.0, 0.0, 0.0], vector![0.0, 0.0, 1.0], 60.0),
         };

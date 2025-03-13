@@ -1,6 +1,5 @@
-use std::f32::consts::{FRAC_PI_2, PI};
-use nalgebra::{point, vector, Point3, Vector3};
-use crate::hsb;
+use std::f32::consts::{PI};
+use nalgebra::{point, vector, Const, OMatrix, OPoint, Point3, Vector3};
 
 const F32_DELTA: f32 = 0.00001;
 
@@ -12,23 +11,6 @@ pub struct PixelPos {
 pub struct Dimensions {
     pub width: u32,
     pub height: u32,
-}
-
-pub fn shader_gradient(pos: PixelPos, dim: Dimensions, _: ()) -> (f32, f32, f32) {
-    let norm_x = pos.x as f32 / dim.width as f32;
-    let norm_y = pos.y as f32 / dim.height as f32;
-
-    (norm_x, norm_y, 0.0)
-}
-
-pub fn shader_spiral(pos: PixelPos, dim: Dimensions, _: ()) -> (f32, f32, f32) {
-    let bounded_x = (pos.x as f32 / dim.width as f32) * 2.0 - 1.0;
-    let bounded_y = (pos.y as f32 / dim.height as f32) * 2.0 - 1.0;
-
-    let angle = (bounded_x/bounded_y).atan();
-    let angle_norm = ((angle / FRAC_PI_2) + 1.0) / 2.0;
-    
-     hsb::hsv_to_rgb(angle_norm, 1.0, 1.0)
 }
 
 pub struct RaytracingUniforms {
@@ -66,21 +48,6 @@ pub(crate) struct Aabb {
     aabb_type: AABBType,
 }
 impl Aabb {
-    pub fn test_instance1() -> Aabb {
-        Aabb {
-            min: point![0.0, -0.5, -0.5],
-            max: point![1.0, 0.5, 0.5],
-            aabb_type: AABBType::Sphere,
-        }
-    }
-    pub fn test_instance2() -> Aabb {
-        Aabb {
-            min: point![-1.0, -0.5, -0.5],
-            max: point![0.0, 0.5, 0.5],
-            aabb_type: AABBType::PlainBox,
-        }
-    }
-    
     pub fn new_sphere(center: &Point3<f32>, radius: f32) -> Aabb {
         Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
@@ -147,6 +114,7 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let y = -((y / height) * 2.0 - 1.0);
     let x = ((x / width) * 2.0 - 1.0) * aspect_ratio;
     
+    //TODO do something with the camera position and direction arguments
     let mut ray = Ray::new(Point3::new(x, y, 0.0), Vector3::new(x, y, focal_distance), false);
     submit_ray(&mut ray, uniforms);
 
@@ -196,37 +164,14 @@ fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
 fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms: &RaytracingUniforms) {
     ray.hit = true;
     let intersection_point = ray.origin + ray.direction * ray_intersection_length;
-    let normal;
-    
-    match aabb.aabb_type {
+    let normal= match aabb.aabb_type {
         AABBType::PlainBox => {
-            let x = if (intersection_point.x - aabb.min.x).abs() < F32_DELTA {
-                -1.0
-            } else if (intersection_point.x - aabb.max.x).abs() < F32_DELTA {
-                1.0
-            } else {
-                0.0
-            };
-            let y = if (intersection_point.y - aabb.min.y).abs() < F32_DELTA {
-                -1.0
-            } else if (intersection_point.y - aabb.max.y).abs() < F32_DELTA {
-                1.0
-            } else {
-                0.0
-            };
-            let z = if (intersection_point.z - aabb.min.z).abs() < F32_DELTA {
-                -1.0
-            } else if (intersection_point.z - aabb.max.z).abs() < F32_DELTA {
-                1.0
-            } else {
-                0.0
-            };
-            normal = vector![x, y, z].normalize();  //normalize just in case, it's a literal edge case
+            plain_box_normal_calculation(aabb, intersection_point)
         }
         AABBType::Sphere => {
             let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
             //let radius = aabb.max.x - sphere_pos.x;
-            normal = (intersection_point - sphere_pos).normalize();
+            (intersection_point - sphere_pos).normalize()
         }
     };
 
@@ -247,6 +192,31 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     ray.intensity = received_intensity * (-ray.direction).dot(&normal);
 }
 
+fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Const<3>>) -> OMatrix<f32, Const<3>, Const<1>> {
+    let x = if (intersection_point.x - aabb.min.x).abs() < F32_DELTA {
+        -1.0
+    } else if (intersection_point.x - aabb.max.x).abs() < F32_DELTA {
+        1.0
+    } else {
+        0.0
+    };
+    let y = if (intersection_point.y - aabb.min.y).abs() < F32_DELTA {
+        -1.0
+    } else if (intersection_point.y - aabb.max.y).abs() < F32_DELTA {
+        1.0
+    } else {
+        0.0
+    };
+    let z = if (intersection_point.z - aabb.min.z).abs() < F32_DELTA {
+        -1.0
+    } else if (intersection_point.z - aabb.max.z).abs() < F32_DELTA {
+        1.0
+    } else {
+        0.0
+    };
+    vector![x, y, z].normalize()
+}
+
 fn miss_shader(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     ray.intensity = 0.0;
     ray.hit = false;
@@ -256,7 +226,7 @@ fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     let mut intersections: Vec<(&Aabb, f32)> = Vec::new();
     
     for aabb in uniforms.aabbs.iter() {
-        if let Some((t_min, _t_max)) = ray_aabb_intersection(ray, &aabb.min, &aabb.max) {
+        if let Some((_t_min, _t_max)) = ray_aabb_intersection(ray, &aabb.min, &aabb.max) {
             if let Some(t) = intersection_shader(ray, aabb) {
                 intersections.push((aabb, t));
             }
