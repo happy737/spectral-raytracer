@@ -7,7 +7,7 @@ use eframe::egui;
 use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
 use image::{DynamicImage, GenericImage, ImageBuffer};
 use log::warn;
-use nalgebra::point;
+use nalgebra::{point, vector};
 use threadpool::ThreadPool;
 use crate::shader::PixelPos;
 
@@ -143,14 +143,20 @@ impl App {
             return;
         }
         
-        let uniforms = shader::RaytracingUniforms{aabbs: vec![
-            //shader::Aabb::test_instance1(),
-            //shader::Aabb::new_sphere(&point![0.0, 0.0, 2.0], 0.5),
-            shader::Aabb::new_box(&point![-0.5, 0.0, 0.0], 0.5, 1.0, 1.0),
-            shader::Aabb::new_sphere(&point![0.5, 0.0, 1.0], 0.5),
-            shader::Aabb::new_sphere(&point![0.0, 0.0, 1.0], 0.5),
-            //shader::Aabb::test_instance2(),
-        ]};
+        let uniforms = shader::RaytracingUniforms{
+            aabbs: vec![
+                //shader::Aabb::new_box(&point![-0.5, 0.0, 1.0], 0.5, 1.0, 1.0),
+                shader::Aabb::new_sphere(&point![0.0, 0.0, 1.0], 1.0),
+                shader::Aabb::new_sphere(&point![1.0, 0.0, 1.0], 1.0),
+                
+                shader::Aabb::new_box(&point![0.0, -1.0, 0.0], 50.0, 0.1, 50.0),
+            ],
+            lights: vec![
+                shader::Light::new(point![0.0, 2.0, -1.0], 10.0),
+                shader::Light::new(point![0.0, 1_000.0, 0.0], 500_000.0),
+            ],
+            camera: shader::Camera::new(point![0.0, 0.0, 0.0], vector![0.0, 0.0, 1.0], 60.0),
+        };
         let uniforms_ref = Arc::new(uniforms);
         
         let now = Instant::now();
