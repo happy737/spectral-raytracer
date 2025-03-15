@@ -241,7 +241,7 @@ impl eframe::App for App {
                     if ui.button("Generate new blank Image").clicked() {
                         self.generate_image_actual(ctx);
                     }
-                    if ui.button("Apply Shader").clicked() {
+                    if ui.button("Start Rendering").clicked() {
                         self.apply_shader2(ctx);
                     }
                 });

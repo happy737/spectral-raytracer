@@ -1,8 +1,11 @@
-use std::f32::consts::{PI};
-use nalgebra::{point, vector, Const, OMatrix, OPoint, Point3, Vector3};
+use std::f32::consts::{PI, TAU};
+use nalgebra::{matrix, point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
 
 const F32_DELTA: f32 = 0.00001;
+const NEW_RAY_MAX_BOUNCES: u32 = 5;
+const TEMP_FRAME_ID: u32 = 1;   //TODO remove this constant and enable multi frame draw
 
+#[derive(Copy, Clone)]
 pub struct PixelPos {
     pub x: u32,
     pub y: u32,
@@ -25,15 +28,35 @@ struct Ray {
     hit: bool,
     intensity: f32,
     skip_hit_shader: bool,
+    max_bounces: u32,
+    original_pixel_pos: PixelPos,
+    hit_distance: f32,
 }
 impl Ray {
-    fn new(origin: Point3<f32>, direction: Vector3<f32>, skip_hit_shader: bool) -> Ray {
+    fn new(origin: Point3<f32>, direction: Vector3<f32>, max_bounces: u32, 
+           original_pixel_pos: PixelPos) -> Ray {
         Ray {
             origin,
             direction: direction.normalize(),
             hit: false,
             intensity: 0.0,
-            skip_hit_shader,
+            skip_hit_shader: false,
+            max_bounces,
+            original_pixel_pos,
+            hit_distance: 0.0,
+        }
+    }
+    
+    fn new_shadow_ray(origin: Point3<f32>, direction: Vector3<f32>) -> Ray {
+        Ray {
+            origin, 
+            direction,
+            hit: false,
+            intensity: 0.0,
+            skip_hit_shader: true,
+            max_bounces: 1, //technically unnecessary
+            original_pixel_pos: PixelPos {x:0, y:0},    //dummy value
+            hit_distance: 0.0,
         }
     }
 }
@@ -111,11 +134,13 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let fov_half_rad = (uniforms.camera.fov_y_deg / 2.0) / 180.0 * PI;
     let focal_distance = 1.0 / fov_half_rad.tan();
     
+    //let pixel_offset = hammersley(frame_number, dim.width * dim.height);  //TODO implement multiple frames
+    
     let y = -((y / height) * 2.0 - 1.0);
     let x = ((x / width) * 2.0 - 1.0) * aspect_ratio;
     
     //TODO do something with the camera position and direction arguments
-    let mut ray = Ray::new(Point3::new(x, y, 0.0), Vector3::new(x, y, focal_distance), false);
+    let mut ray = Ray::new(Point3::new(x, y, 0.0), Vector3::new(x, y, focal_distance), NEW_RAY_MAX_BOUNCES, pos);
     submit_ray(&mut ray, uniforms);
 
     (ray.intensity, ray.intensity, ray.intensity)
@@ -163,6 +188,8 @@ fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
 
 fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms: &RaytracingUniforms) {
     ray.hit = true;
+    ray.hit_distance = ray_intersection_length;
+    
     let intersection_point = ray.origin + ray.direction * ray_intersection_length;
     let normal= match aabb.aabb_type {
         AABBType::PlainBox => {
@@ -175,11 +202,12 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         }
     };
 
+    let new_shot_rays_pos = intersection_point + normal * 0.00001;
+    
     let mut received_intensity = 0f32;
     for light in &uniforms.lights {
-        let shadow_ray_pos = intersection_point + normal * 0.00001;
-        let direction = light.position - shadow_ray_pos;
-        let mut shadow_ray = Ray::new(shadow_ray_pos, direction, true);
+        let direction = light.position - new_shot_rays_pos;
+        let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction);
         submit_ray(&mut shadow_ray, uniforms);
         if !shadow_ray.hit {
             let distance_adjusted = light.intensity / direction.magnitude_squared();
@@ -189,35 +217,22 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         }
     }
     
+    if ray.max_bounces > 1 {
+        let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x, 
+                                                   ray.original_pixel_pos.y, TEMP_FRAME_ID);
+        let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
+        let mut new_ray = Ray::new(intersection_point, new_direction, 
+                               ray.max_bounces - 1, ray.original_pixel_pos);
+        submit_ray(&mut new_ray, uniforms);
+        
+        let distance_adjustment = 1.0 / (new_ray.hit_distance * new_ray.hit_distance);
+        received_intensity += new_ray.intensity * new_direction.dot(&normal) //* distance_adjustment;   //TODO I think this is necessary but IDK
+    }
+    
     ray.intensity = received_intensity * (-ray.direction).dot(&normal);
 }
 
-fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Const<3>>) -> OMatrix<f32, Const<3>, Const<1>> {
-    let x = if (intersection_point.x - aabb.min.x).abs() < F32_DELTA {
-        -1.0
-    } else if (intersection_point.x - aabb.max.x).abs() < F32_DELTA {
-        1.0
-    } else {
-        0.0
-    };
-    let y = if (intersection_point.y - aabb.min.y).abs() < F32_DELTA {
-        -1.0
-    } else if (intersection_point.y - aabb.max.y).abs() < F32_DELTA {
-        1.0
-    } else {
-        0.0
-    };
-    let z = if (intersection_point.z - aabb.min.z).abs() < F32_DELTA {
-        -1.0
-    } else if (intersection_point.z - aabb.max.z).abs() < F32_DELTA {
-        1.0
-    } else {
-        0.0
-    };
-    vector![x, y, z].normalize()
-}
-
-fn miss_shader(ray: &mut Ray, uniforms: &RaytracingUniforms) {
+fn miss_shader(ray: &mut Ray, _uniforms: &RaytracingUniforms) {
     ray.intensity = 0.0;
     ray.hit = false;
 }
@@ -298,4 +313,107 @@ fn ray_aabb_intersection(ray: &Ray, point_min: &Point3<f32>, point_max: &Point3<
     }
     
     Some((t_min, t_max)) 
+}
+
+fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Const<3>>) -> OMatrix<f32, Const<3>, Const<1>> {
+    let x = if (intersection_point.x - aabb.min.x).abs() < F32_DELTA {
+        -1.0
+    } else if (intersection_point.x - aabb.max.x).abs() < F32_DELTA {
+        1.0
+    } else {
+        0.0
+    };
+    let y = if (intersection_point.y - aabb.min.y).abs() < F32_DELTA {
+        -1.0
+    } else if (intersection_point.y - aabb.max.y).abs() < F32_DELTA {
+        1.0
+    } else {
+        0.0
+    };
+    let z = if (intersection_point.z - aabb.min.z).abs() < F32_DELTA {
+        -1.0
+    } else if (intersection_point.z - aabb.max.z).abs() < F32_DELTA {
+        1.0
+    } else {
+        0.0
+    };
+    vector![x, y, z].normalize()
+}
+
+// from http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+// Hacker's Delight, Henry S. Warren, 2001
+fn radical_inverse(mut bits: u32) -> f32 {
+    bits = (bits << 16) | (bits >> 16);
+    bits = ((bits & 0x55555555) << 1) | ((bits & 0xAAAAAAAA) >> 1);
+    bits = ((bits & 0x33333333) << 2) | ((bits & 0xCCCCCCCC) >> 2);
+    bits = ((bits & 0x0F0F0F0F) << 4) | ((bits & 0xF0F0F0F0) >> 4);
+    bits = ((bits & 0x00FF00FF) << 8) | ((bits & 0xFF00FF00) >> 8);
+    (bits as f32) * 2.3283064365386963e-10  // / 0x100000000
+}
+
+fn hammersley(n: u32, N: u32) -> (f32, f32) {
+    (
+        (n as f32 + 0.5) / N as f32,
+        radical_inverse(n + 1),
+    )
+}
+
+/// Calculates three quasi random floats from unsigned integers. The integers can usually be: <br>
+/// x = pixel position x, <br>
+/// y = pixel position y, <br>
+/// z = frame number <br>
+/// The resulting three floats will probably be in range \[0; 1] <br>
+/// <br>
+/// Hash Functions for GPU Rendering, Jarzynski et al. <br>
+/// http://www.jcgt.org/published/0009/03/02/
+fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {    //TODO This function may be improved using simd. Do some testing.
+    x = x * 1664525 + 1013904223;
+    y = y * 1664525 + 1013904223;
+    z = z * 1664525 + 1013904223;
+    x += y * z;
+    y += z * x;
+    z += x * y;
+    x ^= x >> 16;
+    y ^= y >> 16;
+    z ^= z >> 16;
+    x += y * z;
+    y += z * x;
+    z += x * y;
+
+    let reciprocal = 1.0 / 0xffffffffu32 as f32;
+    (
+        x as f32 * reciprocal,
+        y as f32 * reciprocal,
+        z as f32 * reciprocal,
+    )
+}
+
+fn random_bounce_from_normal(normal: &Vector3<f32>, random_x: f32, random_y: f32) -> Vector3<f32> {
+    //determining random angles
+    let azimuthal_angle = random_x * TAU;   //phi
+    let polar_angle = random_y.sqrt().asin();   //theta
+    
+    //generate a random direction in its local space
+    let (local_x, local_y, local_z) = (
+        polar_angle.sin() * azimuthal_angle.cos(),
+        polar_angle.sin() * azimuthal_angle.sin(),
+        polar_angle.cos(),
+    );
+    let local_vec = Vector3::new(local_x, local_y, local_z);
+    
+    //align the local direction with the normal
+    get_normal_space(normal) * local_vec
+}
+
+fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
+    let vec_basis = vector![1.0, 0.0, 0.0];
+    let dd = vec_basis.dot(normal);
+    let mut vec_tangent = vector![0.0, 1.0, 0.0];
+    
+    if 1.0 - dd.abs() > F32_DELTA {
+        vec_tangent = vec_basis.cross(normal).normalize();
+    }
+    let bi_tangent = normal.cross(&vec_tangent);
+    
+    Matrix3::from_columns(&[vec_tangent, bi_tangent, *normal])
 }
