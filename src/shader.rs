@@ -1,9 +1,10 @@
 use std::f32::consts::{PI, TAU};
+use std::rc::Rc;
+use std::sync::Arc;
 use nalgebra::{matrix, point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
 
 const F32_DELTA: f32 = 0.00001;
-const NEW_RAY_MAX_BOUNCES: u32 = 5;
-const TEMP_FRAME_ID: u32 = 1;   //TODO remove this constant and enable multi frame draw
+const NEW_RAY_MAX_BOUNCES: u32 = 30;
 
 #[derive(Copy, Clone)]
 pub struct PixelPos {
@@ -16,10 +17,12 @@ pub struct Dimensions {
     pub height: u32,
 }
 
+#[derive(Clone)]
 pub struct RaytracingUniforms {
-    pub(crate) aabbs: Vec<Aabb>,
-    pub(crate) lights: Vec<Light>,
+    pub(crate) aabbs: Arc<Vec<Aabb>>,
+    pub(crate) lights: Arc<Vec<Light>>,
     pub(crate) camera: Camera,
+    pub(crate) frame_id: u32,
 }
 
 struct Ray {
@@ -108,6 +111,7 @@ impl Light {
     }
 }
 
+#[derive(Clone, Copy)]
 pub (crate) struct Camera {
     pub position: Point3<f32>,
     pub direction: Vector3<f32>,
@@ -144,6 +148,7 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     submit_ray(&mut ray, uniforms);
 
     (ray.intensity, ray.intensity, ray.intensity)
+    //random_pcg3d(pos.x, pos.y, uniforms.frame_id)
 }
 
 fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
@@ -205,7 +210,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     let new_shot_rays_pos = intersection_point + normal * 0.00001;
     
     let mut received_intensity = 0f32;
-    for light in &uniforms.lights {
+    for light in uniforms.lights.iter() {
         let direction = light.position - new_shot_rays_pos;
         let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction);
         submit_ray(&mut shadow_ray, uniforms);
@@ -219,7 +224,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     
     if ray.max_bounces > 1 {
         let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x, 
-                                                   ray.original_pixel_pos.y, TEMP_FRAME_ID);
+                                                   ray.original_pixel_pos.y, uniforms.frame_id);
         let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
         let mut new_ray = Ray::new(intersection_point, new_direction, 
                                ray.max_bounces - 1, ray.original_pixel_pos);
@@ -405,15 +410,30 @@ fn random_bounce_from_normal(normal: &Vector3<f32>, random_x: f32, random_y: f32
     get_normal_space(normal) * local_vec
 }
 
+/// Returns a 3x3 Matrix which, when multiplied by, transforms a Vector3 into the space of the 
+/// normal. A vector which simply points upwards will, after multiplication, point in the direction
+/// of the normal //TODO check if this is necessarily true
+// fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
+//     let vec_basis = vector![1.0, 0.0, 0.0];
+//     let dd = vec_basis.dot(normal);
+//     let mut vec_tangent = vector![0.0, 1.0, 0.0];
+//     
+//     if 1.0 - dd.abs() > F32_DELTA {
+//         vec_tangent = vec_basis.cross(normal).normalize();
+//     }
+//     let bi_tangent = normal.cross(&vec_tangent);
+//     
+//     Matrix3::from_columns(&[vec_tangent, bi_tangent, *normal])
+// }
 fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
     let vec_basis = vector![1.0, 0.0, 0.0];
     let dd = vec_basis.dot(normal);
-    let mut vec_tangent = vector![0.0, 1.0, 0.0];
-    
+    let mut vec_tangent = vector![0.0, 0.0, 1.0];
+
     if 1.0 - dd.abs() > F32_DELTA {
         vec_tangent = vec_basis.cross(normal).normalize();
     }
     let bi_tangent = normal.cross(&vec_tangent);
-    
-    Matrix3::from_columns(&[vec_tangent, bi_tangent, *normal])
+
+    Matrix3::from_columns(&[vec_tangent, *normal, bi_tangent])
 }
