@@ -11,9 +11,9 @@ use nalgebra::{point, vector};
 use threadpool::ThreadPool;
 use crate::shader::PixelPos;
 
-const NBR_OF_THREADS: usize = 20;
+const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 50;
-const NBR_OF_ITERATIONS: u32 = 32;
+const NBR_OF_ITERATIONS_DEFAULT: u32 = 32;
 
 fn main() -> eframe::Result {
     //Set up logging for the project
@@ -38,6 +38,8 @@ fn main() -> eframe::Result {
     )
 }
 
+/// Struct that forms the main data of the app. The struct contains data such as the generated 
+/// images or the values input into the UI. 
 struct App {
     ui_values: UIFields,
     image_float: Option<custom_image::CustomImage>,
@@ -52,7 +54,7 @@ impl App {
             image_float: None,
             image_actual: None,
             image_eframe_texture: None,
-            thread_pool: ThreadPool::new(NBR_OF_THREADS),
+            thread_pool: ThreadPool::new(NBR_OF_THREADS_DEFAULT),
         }
     }
 
@@ -111,10 +113,10 @@ impl App {
                     if num != 0 {
                         self.ui_values.nbr_of_iterations = num;
                     } else {
-                        self.ui_values.nbr_of_iterations = NBR_OF_ITERATIONS;
+                        self.ui_values.nbr_of_iterations = NBR_OF_ITERATIONS_DEFAULT;
                     }
                 } else if nbr_of_iterations_string.is_empty() {
-                    self.ui_values.nbr_of_iterations = NBR_OF_ITERATIONS;
+                    self.ui_values.nbr_of_iterations = NBR_OF_ITERATIONS_DEFAULT;
                 }
             });
         });
@@ -302,8 +304,8 @@ impl Default for UIFields {
             width: 600,
             height: 400,
             frame_gen_time: None,
-            nbr_of_iterations: NBR_OF_ITERATIONS,
-            nbr_of_threads: NBR_OF_THREADS,
+            nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
+            nbr_of_threads: NBR_OF_THREADS_DEFAULT,
             tab: UiTab::Settings,
         }
     }
@@ -317,7 +319,8 @@ enum UiTab {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
+        //Top Menu bar (File, Edit, ...)
         TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -352,6 +355,7 @@ impl eframe::App for App {
             });
         });
         
+        //main content div. 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.horizontal_top(|ui| {
@@ -367,6 +371,7 @@ impl eframe::App for App {
                 });
             });
             
+            //content depending on the tab state 
             match self.ui_values.tab {
                 UiTab::Settings => {
                     self.display_width_text_edit_field(ui);

@@ -13,12 +13,16 @@ pub struct CustomImage {
 }
 
 impl CustomImage {
+    /// Generates a new CustomImage with given width and height. All float values are set to 0.0, 
+    /// black in standard interpretation. The length of the data is width * height * 4 (r, g, b, a). 
     pub fn new(width: u32, height: u32) -> CustomImage {
         let data = vec![0.0; (width * height * 4) as usize];
         
         CustomImage {width, height, data}
     }
     
+    /// Generates a new CustomImage from a given width, height and data vec. Will return a 
+    /// CustomImageError if the length of the data does not match the width and height. 
     pub fn new_from_data(width: u32, height: u32, data: Vec<f32>) -> Result<CustomImage, CustomImageError> {
         if width * height * 4 != data.len() as u32 {
             return Err(CustomImageError{error: "Data length does not match given width and height!".to_string()});
@@ -26,6 +30,12 @@ impl CustomImage {
         Ok(CustomImage { width, height, data })
     }
     
+    /// Takes a row of Pixels and blends each pixel with the corresponding row in the data. The 
+    /// Pixels are blended according to the supplied weight factor where the new Pixels are 
+    /// multiplied by new_weight_factor, the old Pixels are multiplied by 1 - new_weight_factor and 
+    /// the two values are added to form the blended Pixels. <br/>
+    /// Returns a CustomImageError if the row length does not equal width or if the row number is 
+    /// equal to or greater than height. 
     pub fn blend_row(&mut self, pixels: &[Pixel], row_number: usize, new_weight_factor: f32) -> Result<(), CustomImageError>{   //TODO SIMD optimisation?
         if pixels.len() != self.width as usize {
             return Err(CustomImageError {error: "Row too long or short!".to_owned()});
@@ -43,6 +53,9 @@ impl CustomImage {
         Ok(())
     }
 
+    /// Blends a single Pixel at the given position with the old data. The new Pixel is multiplied 
+    /// by new_weight_factor and the old Pixel by 1 - new_weight_factor, then added together. <br/>
+    /// Returns a CustomImageError if x or y are out of bounds. 
     pub fn blend_pixel(&mut self, x: usize, y: usize, pixel: &Pixel, new_weight_factor: f32)    //TODO SIMD optimisation?
         -> Result<(), CustomImageError> {
 
@@ -65,10 +78,12 @@ impl CustomImage {
         Ok(())
     }
     
+    /// Returns the images width. 
     pub fn get_width(&self) -> u32 {
         self.width
     }
     
+    /// Returns the images height. 
     pub fn get_height(&self) -> u32 {
         self.height
     }
@@ -85,11 +100,15 @@ impl Into<DynamicImage> for CustomImage {   //TODO replace with implementation D
     }
 }
 
+/// An error type used by the CustomImage struct to communicate issues with the supplied parameters 
+/// in the API. Specific details of the error are given in the error String. 
 #[derive(Debug)]
 pub struct CustomImageError {
     pub error: String,
 }
 
+/// A symbolic struct representing a pixel where the four f32 values represent red, green, blue and
+/// alpha in order. Each field is publicly accessible. 
 #[derive(Copy, Clone, Debug)]
 pub struct Pixel {
     pub r: f32,
