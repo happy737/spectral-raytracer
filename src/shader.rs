@@ -1,7 +1,7 @@
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
-use crate::{shader, UICamera};
+use crate::{shader, UICamera, UILight};
 
 const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
@@ -120,6 +120,12 @@ impl Light {
             position,
             intensity,
         }
+    }
+}
+
+impl From<&UILight> for Light {
+    fn from(value: &UILight) -> Self {
+        Light::new(point![value.pos_x, value.pos_y, value.pos_z], value.intensity)
     }
 }
 

@@ -4,10 +4,10 @@ mod custom_image;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use eframe::egui;
-use eframe::egui::{menu, IconData, Layout, TopBottomPanel, Ui};
+use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
 use image::{DynamicImage, ImageBuffer};
 use log::{info, warn};
-use nalgebra::{point, vector};
+use nalgebra::{point};
 use threadpool::ThreadPool;
 use crate::shader::PixelPos;
 
@@ -118,6 +118,10 @@ impl App {
                 } else if nbr_of_iterations_string.is_empty() {
                     self.ui_values.nbr_of_iterations = NBR_OF_ITERATIONS_DEFAULT;
                 }
+                
+                if ui.button("Single Frame").clicked() {
+                    self.ui_values.nbr_of_iterations = 1;
+                }
             });
         });
     }
@@ -142,67 +146,126 @@ impl App {
         ui.label(format!("Time to generate frame: {s}"));
     }
     
+    /// Shortcut function to display various settings for the camera. The settings can be changed 
+    /// and the updated values will be used in the rendering process. 
     fn display_camera_settings(&mut self, ui: &mut Ui) {
-        ui.vertical_centered(|ui| {
-            ui.horizontal_top(|ui| {
-                let mut pos_x_string = self.ui_values.ui_camera.pos_x.to_string();
-                let mut pos_y_string = self.ui_values.ui_camera.pos_y.to_string();
-                let mut pos_z_string = self.ui_values.ui_camera.pos_z.to_string();
-                ui.label("Camera Position: (x:");
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
-                ui.label("y:");
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
-                ui.label("z:");
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
-                ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
-                
-                if pos_x_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.pos_x = pos_x_string.parse::<f32>().unwrap();
-                }
-                if pos_y_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.pos_y = pos_y_string.parse::<f32>().unwrap();
-                }
-                if pos_z_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.pos_z = pos_z_string.parse::<f32>().unwrap();
-                }
-            });
+        //camera position
+        ui.horizontal_top(|ui| {
+            let mut pos_x_string = self.ui_values.ui_camera.pos_x.to_string();
+            let mut pos_y_string = self.ui_values.ui_camera.pos_y.to_string();
+            let mut pos_z_string = self.ui_values.ui_camera.pos_z.to_string();
+            ui.label("Camera Position: (x:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+            ui.label("y:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+            ui.label("z:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+            ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+
+            if pos_x_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.pos_x = pos_x_string.parse::<f32>().unwrap();
+            }
+            if pos_y_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.pos_y = pos_y_string.parse::<f32>().unwrap();
+            }
+            if pos_z_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.pos_z = pos_z_string.parse::<f32>().unwrap();
+            }
         });
-        ui.vertical_centered(|ui| {
-            ui.horizontal_top(|ui| {
-                let mut dir_x_string = self.ui_values.ui_camera.dir_x.to_string();
-                let mut dir_y_string = self.ui_values.ui_camera.dir_y.to_string();
-                let mut dir_z_string = self.ui_values.ui_camera.dir_z.to_string();
-                
-                ui.label("Camera Looking at: (x:");
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_x_string));
-                ui.label("y:");
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_y_string));
-                ui.label("z:");
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_z_string));
-                ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+        
+        //camera direction
+        ui.horizontal_top(|ui| {
+            let mut dir_x_string = self.ui_values.ui_camera.dir_x.to_string();
+            let mut dir_y_string = self.ui_values.ui_camera.dir_y.to_string();
+            let mut dir_z_string = self.ui_values.ui_camera.dir_z.to_string();
 
-                if dir_x_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.dir_x = dir_x_string.parse::<f32>().unwrap();
-                }
-                if dir_y_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.dir_y = dir_y_string.parse::<f32>().unwrap();
-                }
-                if dir_z_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.dir_z = dir_z_string.parse::<f32>().unwrap();
-                }
-            });
+            ui.label("Camera Direction: (x:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_x_string));
+            ui.label("y:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_y_string));
+            ui.label("z:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_z_string));
+            ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+
+            if dir_x_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.dir_x = dir_x_string.parse::<f32>().unwrap();
+            }
+            if dir_y_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.dir_y = dir_y_string.parse::<f32>().unwrap();
+            }
+            if dir_z_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.dir_z = dir_z_string.parse::<f32>().unwrap();
+            }
         });
-        ui.vertical_centered(|ui| {
-            ui.horizontal_top(|ui| {
-                ui.label("Camera vertical FOV in degrees:");
-                let mut fov_string = self.ui_values.ui_camera.fov_deg_y.to_string();
+        
+        //camera FOV
+        ui.horizontal_top(|ui| {
+            ui.label("Camera vertical FOV in degrees:");
+            let mut fov_string = self.ui_values.ui_camera.fov_deg_y.to_string();
 
-                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut fov_string));
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut fov_string));
 
-                if fov_string.parse::<f32>().is_ok() {
-                    self.ui_values.ui_camera.fov_deg_y = fov_string.parse::<f32>().unwrap();
+            if fov_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.fov_deg_y = fov_string.parse::<f32>().unwrap();
+            }
+        });
+    }
+    
+    /// Shortcut function to display various settings for a single Light object. The settings can 
+    /// be changed and the updated values will be used in the rendering process. 
+    fn display_light_source_settings(&mut self, ui: &mut Ui, index: usize) { 
+        let light = &mut self.ui_values.ui_lights[index];
+        
+        //name
+        ui.horizontal_top(|ui| {
+            let name = format!("Light Source #{}", index);
+            ui.label(name);
+            ui.add_space(100.0);
+            
+            let delete_button = egui::widgets::Button::new("Delete this light source").fill(egui::Color32::LIGHT_RED);
+            if ui.add(delete_button).clicked() {
+            //if ui.button("Delete this light source").clicked() {
+                self.ui_values.after_ui_actions.push(AfterUIActions::DeleteLight(index));
+                info!("Light Source #{} has been scheduled for deletion.", index);
+            }
+        });
+        
+        //light position
+        ui.horizontal_top(|ui| {
+            let mut pos_x_string = light.pos_x.to_string();
+            let mut pos_y_string = light.pos_y.to_string();
+            let mut pos_z_string = light.pos_z.to_string();
+            ui.label("Light Position: (x:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+            ui.label("y:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+            ui.label("z:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+            ui.label(")");
+
+            if pos_x_string.parse::<f32>().is_ok() {
+                light.pos_x = pos_x_string.parse::<f32>().unwrap();
+            }
+            if pos_y_string.parse::<f32>().is_ok() {
+                light.pos_y = pos_y_string.parse::<f32>().unwrap();
+            }
+            if pos_z_string.parse::<f32>().is_ok() {
+                light.pos_z = pos_z_string.parse::<f32>().unwrap();
+            }
+        });
+        
+        //light intensity
+        ui.horizontal_top(|ui| {
+            let mut intensity_string = light.intensity.to_string();
+            ui.label("Light Intensity: ");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut intensity_string));
+
+            if intensity_string.parse::<f32>().is_ok() {
+                let input = intensity_string.parse::<f32>().unwrap();
+                if input >= 0.0 {
+                    light.intensity = input;
                 }
-            });
+            }
         });
     }
     
@@ -305,10 +368,7 @@ impl App {
 
                 shader::Aabb::new_box(&point![0.0, -1.0, 0.0], 50.0, 0.1, 50.0),
             ]),
-            lights: Arc::new(vec![
-                shader::Light::new(point![0.0, 2.0, -1.0], 10.0),
-                shader::Light::new(point![0.0, 1_000.0, 0.0], 1_000_000.0),
-            ]),
+            lights: Arc::new(self.ui_values.ui_lights.iter().map(|uil| uil.into()).collect()),
             camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
         };
@@ -361,9 +421,54 @@ struct UIFields {
     nbr_of_iterations: u32,
     nbr_of_threads: usize,
     tab: UiTab,
+    after_ui_actions: Vec<AfterUIActions>,
     ui_camera: UICamera,
+    ui_lights: Vec<UILight>, 
+}
+impl Default for UIFields {
+    fn default() -> Self {
+        let ui_lights = vec![
+            UILight::new(0.0, 2.0, -1.0, 10.0),
+            UILight::new(0.0, 1_000.0, 0.0, 1_000_000.0),
+        ];
+        
+        Self {
+            width: 600,
+            height: 400,
+            frame_gen_time: None,
+            nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
+            nbr_of_threads: NBR_OF_THREADS_DEFAULT,
+            tab: UiTab::Settings,
+            after_ui_actions: Vec::new(),
+            ui_camera: UICamera::default(),
+            ui_lights,
+        }
+    }
 }
 
+/// This struct is a collection of values which can be assembled to a Light object. Coupled values
+/// such as position x, y and z are separated here to allow for easier manipulation by the ui. 
+#[derive(Debug)]
+struct UILight {
+    pos_x: f32,
+    pos_y: f32,
+    pos_z: f32,
+    intensity: f32,
+}
+
+impl UILight {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, intensity: f32) -> Self {
+        Self {
+            pos_x,
+            pos_y,
+            pos_z,
+            intensity,
+        }
+    }
+}
+
+/// This struct is a collection of values which can be assembled to a Camera object. Coupled values
+/// such as position x, y and z are separated here to allow for easier manipulation by the ui. 
 struct UICamera {
     pos_x: f32,
     pos_y: f32,
@@ -377,36 +482,29 @@ struct UICamera {
 impl Default for UICamera {
     fn default() -> Self {
         Self {
-            pos_x: 0.0, 
+            pos_x: 0.0,
             pos_y: 0.0,
             pos_z: 0.0,
-            dir_x: 0.0, 
-            dir_y: 0.0, 
-            dir_z: 1.0, 
+            dir_x: 0.0,
+            dir_y: 0.0,
+            dir_z: 1.0,
             fov_deg_y: 60.0,
         }
     }
 }
 
-impl Default for UIFields {
-    fn default() -> Self {
-        Self {
-            width: 600,
-            height: 400,
-            frame_gen_time: None,
-            nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
-            nbr_of_threads: NBR_OF_THREADS_DEFAULT,
-            tab: UiTab::Settings,
-            ui_camera: UICamera::default(),
-        }
-    }
-}
 
 /// This enum differentiates which tab is currently displayed in the apps main content window. 
 enum UiTab {
     Settings,   //pre render settings such as width, height or number of frames
     Objects,    //3D models and lights defined in the scene
     Display,    //the screen ultimately displaying the result 
+}
+
+/// This enum describes a number of actions which have to be taken after the UI is displayed such 
+/// as deleting objects. 
+enum AfterUIActions {
+    DeleteLight(usize),
 }
 
 impl eframe::App for App {
@@ -449,7 +547,7 @@ impl eframe::App for App {
         //main content div. 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.horizontal_top(|ui| {
+                ui.horizontal_top(|ui| {    //TODO these buttons might be replaceable by frames with zero outer margin
                     if ui.button("Settings").clicked() {
                         self.ui_values.tab = UiTab::Settings;
                     }
@@ -462,6 +560,9 @@ impl eframe::App for App {
                 });
             });
             
+            //a dividing line between category buttons and the main content
+            ui.add(egui::Separator::default().horizontal().grow(10.0));
+            
             //content depending on the tab state 
             match self.ui_values.tab {
                 UiTab::Settings => {
@@ -472,10 +573,28 @@ impl eframe::App for App {
                 }
                 UiTab::Objects => {
                     egui::ScrollArea::vertical().show(ui, |ui| {
-                        egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).show(ui, |ui| {
-                            ui.label("Camera:");
+                        ui.label("Camera:");
+                        egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                             self.display_camera_settings(ui);
                         });
+                        
+                        ui.add_space(10.0);
+                        
+                        ui.vertical_centered(|ui| {
+                            ui.horizontal_top(|ui| {
+                                ui.label("Light Sources:");
+                                ui.add_space(100.0);
+                                if ui.button("Add New Light Source").clicked() {
+                                    let light = UILight::new(0.0, 0.0, 0.0, 1.0);
+                                    self.ui_values.ui_lights.push(light);
+                                }
+                            });
+                        });
+                        for index in 0..self.ui_values.ui_lights.len() {
+                            egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                self.display_light_source_settings(ui, index);
+                            });
+                        }
                     });
                 }
                 UiTab::Display => {
@@ -499,5 +618,18 @@ impl eframe::App for App {
                 }
             }
         });
+
+        //ui is finished drawing, but some actions have to be done after this point such as deleting
+        //elements with a button press. 
+        let mut lights_deleted = 0;
+        for action in &self.ui_values.after_ui_actions {
+            match action {
+                AfterUIActions::DeleteLight(index) => {
+                    self.ui_values.ui_lights.remove(*index - lights_deleted);
+                    lights_deleted += 1;
+                }
+            }
+        }
+        self.ui_values.after_ui_actions.clear();
     }
 }
