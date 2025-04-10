@@ -1,22 +1,26 @@
 use std::f32::consts::{PI, TAU};
-use std::rc::Rc;
 use std::sync::Arc;
-use nalgebra::{matrix, point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
+use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
+use crate::{shader, UICamera};
 
 const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
 
+/// The position of the pixel on the screen. (0, 0) is the top left. 
 #[derive(Copy, Clone)]
 pub struct PixelPos {
     pub x: u32,
     pub y: u32,
 }
 
+/// The struct holds the width and height of the rendered frame. 
 pub struct Dimensions {
     pub width: u32,
     pub height: u32,
 }
 
+/// The struct holds the uniform data which is constant per frame. This includes things as the 
+/// information about light sources or objects in the scene. 
 #[derive(Clone)]
 pub struct RaytracingUniforms {
     pub(crate) aabbs: Arc<Vec<Aabb>>,
@@ -25,6 +29,8 @@ pub struct RaytracingUniforms {
     pub(crate) frame_id: u32,
 }
 
+/// The struct representing the ray that is shot through the scene. It contains information about
+/// the origin and direction as well as returned information such as color (intensity). 
 struct Ray {
     origin: Point3<f32>,
     direction: Vector3<f32>,
@@ -36,6 +42,8 @@ struct Ray {
     hit_distance: f32,
 }
 impl Ray {
+    /// Creates a new standard Ray with default values for the values which will be written to in 
+    /// the shaders. 
     fn new(origin: Point3<f32>, direction: Vector3<f32>, max_bounces: u32, 
            original_pixel_pos: PixelPos) -> Ray {
         Ray {
@@ -50,6 +58,10 @@ impl Ray {
         }
     }
     
+    /// Creates a new shadow ray. Shadow rays are rays which terminate upon hitting anything and 
+    /// can thus be used to determine if an unobstructed line to another point exists. The 
+    /// closest-hit shader will not be executed for this ray. The field hit will be set to true if 
+    /// anything is hit. 
     fn new_shadow_ray(origin: Point3<f32>, direction: Vector3<f32>) -> Ray {
         Ray {
             origin, 
@@ -128,6 +140,23 @@ impl Camera {
     }
 }
 
+impl From<&UICamera> for Camera {
+    fn from(ui_camera: &UICamera) -> Self {
+        Camera::new(
+            point![
+                    ui_camera.pos_x, 
+                    ui_camera.pos_y, 
+                    ui_camera.pos_z
+                ],
+            vector![
+                    ui_camera.dir_x, 
+                    ui_camera.dir_y, 
+                    ui_camera.dir_z
+                ],
+            ui_camera.fov_deg_y)
+    }
+}
+
 /// The ray generation shader. 
 pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &RaytracingUniforms) -> (f32, f32, f32) {
     let x = pos.x as f32;
@@ -138,7 +167,7 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let fov_half_rad = (uniforms.camera.fov_y_deg / 2.0) / 180.0 * PI;
     let focal_distance = 1.0 / fov_half_rad.tan();
     
-    //let pixel_offset = hammersley(frame_number, dim.width * dim.height);  //TODO implement multiple frames
+    //let pixel_offset = hammersley(frame_number, dim.width * dim.height);  //TODO implement differing positions from multiple frames
     
     let y = -((y / height) * 2.0 - 1.0);
     let x = ((x / width) * 2.0 - 1.0) * aspect_ratio;
@@ -237,11 +266,17 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     ray.intensity = received_intensity * (-ray.direction).dot(&normal);
 }
 
+/// The miss shader. It is called on a submitted ray if this ray does ultimately not hit anything. 
+/// <br/>
+/// Here it does nothing but set the intensity/color to 0 (black) and set the hit flag to false. 
 fn miss_shader(ray: &mut Ray, _uniforms: &RaytracingUniforms) {
     ray.intensity = 0.0;
     ray.hit = false;
 }
 
+/// The heart of the raytracing engine, here the rays are actually shot and tracked through the 
+/// scene. After all collisions have been determined, the appropriate shaders are called, which
+/// mutate the ray and after this function returns, the result can be read from the submitted ray. 
 fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     let mut intersections: Vec<(&Aabb, f32)> = Vec::new();
     
@@ -267,12 +302,17 @@ fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     }
 }
 
+/// An enum to differentiate between the possible cases of a ray-sphere-intersection. The ray can
+/// miss (NoIntersection), it can graze the sphere (OneIntersection) or go through 
+/// (TwoIntersections). 
 enum SphereIntersection {
     TwoIntersections(f32, f32),
     OneIntersection(f32),
     NoIntersection,
 }
 
+/// Calculates the intersection between a ray and a sphere. The intersection points are returned as
+/// scalars for the direction of the ray. 
 fn ray_sphere_intersection(ray: &Ray, sphere_pos: &Point3<f32>, sphere_rad: f32) -> SphereIntersection {
     let oc = ray.origin - sphere_pos;
     let a = ray.direction.dot(&ray.direction);
@@ -413,18 +453,6 @@ fn random_bounce_from_normal(normal: &Vector3<f32>, random_x: f32, random_y: f32
 /// Returns a 3x3 Matrix which, when multiplied by, transforms a Vector3 into the space of the 
 /// normal. A vector which simply points upwards will, after multiplication, point in the direction
 /// of the normal //TODO check if this is necessarily true
-// fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
-//     let vec_basis = vector![1.0, 0.0, 0.0];
-//     let dd = vec_basis.dot(normal);
-//     let mut vec_tangent = vector![0.0, 1.0, 0.0];
-//     
-//     if 1.0 - dd.abs() > F32_DELTA {
-//         vec_tangent = vec_basis.cross(normal).normalize();
-//     }
-//     let bi_tangent = normal.cross(&vec_tangent);
-//     
-//     Matrix3::from_columns(&[vec_tangent, bi_tangent, *normal])
-// }
 fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
     let vec_basis = vector![1.0, 0.0, 0.0];
     let dd = vec_basis.dot(normal);

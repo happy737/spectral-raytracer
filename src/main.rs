@@ -4,8 +4,8 @@ mod custom_image;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use eframe::egui;
-use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
-use image::{DynamicImage, GenericImage, ImageBuffer};
+use eframe::egui::{menu, IconData, Layout, TopBottomPanel, Ui};
+use image::{DynamicImage, ImageBuffer};
 use log::{info, warn};
 use nalgebra::{point, vector};
 use threadpool::ThreadPool;
@@ -142,6 +142,70 @@ impl App {
         ui.label(format!("Time to generate frame: {s}"));
     }
     
+    fn display_camera_settings(&mut self, ui: &mut Ui) {
+        ui.vertical_centered(|ui| {
+            ui.horizontal_top(|ui| {
+                let mut pos_x_string = self.ui_values.ui_camera.pos_x.to_string();
+                let mut pos_y_string = self.ui_values.ui_camera.pos_y.to_string();
+                let mut pos_z_string = self.ui_values.ui_camera.pos_z.to_string();
+                ui.label("Camera Position: (x:");
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+                ui.label("y:");
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+                ui.label("z:");
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+                ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+                
+                if pos_x_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.pos_x = pos_x_string.parse::<f32>().unwrap();
+                }
+                if pos_y_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.pos_y = pos_y_string.parse::<f32>().unwrap();
+                }
+                if pos_z_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.pos_z = pos_z_string.parse::<f32>().unwrap();
+                }
+            });
+        });
+        ui.vertical_centered(|ui| {
+            ui.horizontal_top(|ui| {
+                let mut dir_x_string = self.ui_values.ui_camera.dir_x.to_string();
+                let mut dir_y_string = self.ui_values.ui_camera.dir_y.to_string();
+                let mut dir_z_string = self.ui_values.ui_camera.dir_z.to_string();
+                
+                ui.label("Camera Looking at: (x:");
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_x_string));
+                ui.label("y:");
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_y_string));
+                ui.label("z:");
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_z_string));
+                ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+
+                if dir_x_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.dir_x = dir_x_string.parse::<f32>().unwrap();
+                }
+                if dir_y_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.dir_y = dir_y_string.parse::<f32>().unwrap();
+                }
+                if dir_z_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.dir_z = dir_z_string.parse::<f32>().unwrap();
+                }
+            });
+        });
+        ui.vertical_centered(|ui| {
+            ui.horizontal_top(|ui| {
+                ui.label("Camera vertical FOV in degrees:");
+                let mut fov_string = self.ui_values.ui_camera.fov_deg_y.to_string();
+
+                ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut fov_string));
+
+                if fov_string.parse::<f32>().is_ok() {
+                    self.ui_values.ui_camera.fov_deg_y = fov_string.parse::<f32>().unwrap();
+                }
+            });
+        });
+    }
+    
     /// Generates the image in which the render result will be stored as soon as the CustomImage is 
     /// no longer necessary. This image has to be generated beforehand. 
     fn generate_image_actual(&mut self, ctx: &egui::Context) {
@@ -176,7 +240,7 @@ impl App {
     
     /// A single frame render process. Takes the uniforms and mixes the image into the CustomImage TODO actual reference
     /// at the appropriate level. 
-    fn apply_shader2(&mut self, ctx: &egui::Context, uniforms: Arc<shader::RaytracingUniforms>) {
+    fn apply_shader2(&mut self, _ctx: &egui::Context, uniforms: Arc<shader::RaytracingUniforms>) {
         let img = self.image_float.as_mut().unwrap();
         let width = img.get_width();
         let height = img.get_height();
@@ -245,7 +309,7 @@ impl App {
                 shader::Light::new(point![0.0, 2.0, -1.0], 10.0),
                 shader::Light::new(point![0.0, 1_000.0, 0.0], 1_000_000.0),
             ]),
-            camera: shader::Camera::new(point![0.0, 0.0, 0.0], vector![0.0, 0.0, 1.0], 60.0),
+            camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
         };
         
@@ -297,7 +361,33 @@ struct UIFields {
     nbr_of_iterations: u32,
     nbr_of_threads: usize,
     tab: UiTab,
+    ui_camera: UICamera,
 }
+
+struct UICamera {
+    pos_x: f32,
+    pos_y: f32,
+    pos_z: f32,
+    dir_x: f32,
+    dir_y: f32,
+    dir_z: f32,
+    fov_deg_y: f32,
+}
+
+impl Default for UICamera {
+    fn default() -> Self {
+        Self {
+            pos_x: 0.0, 
+            pos_y: 0.0,
+            pos_z: 0.0,
+            dir_x: 0.0, 
+            dir_y: 0.0, 
+            dir_z: 1.0, 
+            fov_deg_y: 60.0,
+        }
+    }
+}
+
 impl Default for UIFields {
     fn default() -> Self {
         Self {
@@ -307,6 +397,7 @@ impl Default for UIFields {
             nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
             nbr_of_threads: NBR_OF_THREADS_DEFAULT,
             tab: UiTab::Settings,
+            ui_camera: UICamera::default(),
         }
     }
 }
@@ -380,11 +471,17 @@ impl eframe::App for App {
                     self.display_nbr_of_iterations_edit_field(ui);
                 }
                 UiTab::Objects => {
-                    todo!() 
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).show(ui, |ui| {
+                            ui.label("Camera:");
+                            self.display_camera_settings(ui);
+                        });
+                    });
                 }
                 UiTab::Display => {
                     ui.horizontal_top(|ui| {
                         self.display_frame_generation_time(ui);
+                        //TODO implement progress bars per frame and overall
                     });
 
                     egui::Frame::NONE.fill(egui::Color32::GRAY).show(ui, |ui| {
