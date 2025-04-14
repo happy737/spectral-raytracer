@@ -420,7 +420,7 @@ impl App {
         );
     }
     
-    /// Generates a new blank CustomImage //TODO insert actual link
+    /// Generates a new blank [CustomImage](custom_image::CustomImage) 
     /// and moves it to the main app. 
     fn generate_image_float(&mut self) {
         let width = self.ui_values.width;
@@ -430,8 +430,8 @@ impl App {
         self.image_float = Some(img);
     }
     
-    /// A single frame render process. Takes the uniforms and mixes the image into the CustomImage TODO actual reference
-    /// at the appropriate level. 
+    /// A single frame render process. Takes the uniforms and mixes the image into the 
+    /// [CustomImage](custom_image::CustomImage) at the appropriate level. 
     fn apply_shader2(&mut self, _ctx: &egui::Context, uniforms: Arc<shader::RaytracingUniforms>) {
         let img = self.image_float.as_mut().unwrap();
         let width = img.get_width();

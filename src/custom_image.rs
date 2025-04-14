@@ -89,14 +89,13 @@ impl CustomImage {
     }
 }
 
-impl Into<DynamicImage> for CustomImage {   //TODO replace with implementation DynamicImage::from::<CustomImage>
-    fn into(self) -> DynamicImage {
-        let data_as_bytes = self.data.into_iter().map(|mut float| {
+impl From<CustomImage> for DynamicImage {
+    fn from(value: CustomImage) -> Self {
+        let data_as_bytes = value.data.into_iter().map(|mut float| {
             float *= 255.0;
             float as u8
         }).collect::<Vec<u8>>();
-
-        RgbaImage::from_raw(self.width, self.height, data_as_bytes).unwrap().into()
+        RgbaImage::from_raw(value.width, value.height, data_as_bytes).unwrap().into()
     }
 }
 
