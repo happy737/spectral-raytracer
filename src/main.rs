@@ -1,13 +1,13 @@
 mod shader;
 mod custom_image;
 
+use std::fmt::{Display, Formatter};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use eframe::egui;
 use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
 use image::{DynamicImage, ImageBuffer};
 use log::{info, warn};
-use nalgebra::{point};
 use threadpool::ThreadPool;
 use crate::shader::PixelPos;
 
@@ -224,8 +224,7 @@ impl App {
             
             let delete_button = egui::widgets::Button::new("Delete this light source").fill(egui::Color32::LIGHT_RED);
             if ui.add(delete_button).clicked() {
-            //if ui.button("Delete this light source").clicked() {
-                self.ui_values.after_ui_actions.push(AfterUIActions::DeleteLight(index));
+                self.ui_values.after_ui_action = Some(AfterUIActions::DeleteLight(index));
                 info!("Light Source #{} has been scheduled for deletion.", index);
             }
         });
@@ -267,6 +266,136 @@ impl App {
                 }
             }
         });
+    }
+    
+    fn display_objects_settings(&mut self, ui: &mut Ui, index: usize) {
+        let object = &mut self.ui_values.ui_objects[index];
+
+        //name
+        ui.horizontal_top(|ui| {
+            let name = format!("{} #{}", object, index);
+            ui.label(name);
+            ui.add_space(30.0);
+            
+            #[derive(PartialEq, Clone, Copy, Debug)]
+            enum Type {
+                PlainBox,
+                Sphere,
+            }
+            impl Display for Type {
+                fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                    let s = match self {
+                        Type::PlainBox => "PlainBox",
+                        Type::Sphere => "Sphere",
+                    };
+                    write!(f, "{s}")
+                }
+            }
+            let mut selected = match object.ui_object_type {
+                UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
+                UIObjectType::Sphere(_) => Type::Sphere,
+            };
+            egui::ComboBox::new(index, "Type")
+                .selected_text(format!("{}", selected))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut selected, Type::PlainBox, "Plain Box");
+                    ui.selectable_value(&mut selected, Type::Sphere, "Sphere");
+                });
+            let same = selected == match object.ui_object_type {
+                UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
+                UIObjectType::Sphere(_) => Type::Sphere,
+            };
+            if !same {
+                object.ui_object_type = match selected {
+                    Type::PlainBox => UIObjectType::default_plain_box(),
+                    Type::Sphere => UIObjectType::default_sphere(),
+                }
+            }
+            ui.add_space(30.0);
+
+            let delete_button = egui::widgets::Button::new("Delete this object").fill(egui::Color32::LIGHT_RED);
+            if ui.add(delete_button).clicked() {
+                self.ui_values.after_ui_action = Some(AfterUIActions::DeleteObject(index));
+                info!("Object #{} has been scheduled for deletion.", index);
+            }
+        });
+        
+        //object position
+        ui.horizontal_top(|ui| {
+            let mut pos_x_string = object.pos_x.to_string();
+            let mut pos_y_string = object.pos_y.to_string();
+            let mut pos_z_string = object.pos_z.to_string();
+            ui.label("Object Position: (x:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+            ui.label("y:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+            ui.label("z:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+            ui.label(")");
+
+            if pos_x_string.parse::<f32>().is_ok() {
+                object.pos_x = pos_x_string.parse::<f32>().unwrap();
+            }
+            if pos_y_string.parse::<f32>().is_ok() {
+                object.pos_y = pos_y_string.parse::<f32>().unwrap();
+            }
+            if pos_z_string.parse::<f32>().is_ok() {
+                object.pos_z = pos_z_string.parse::<f32>().unwrap();
+            }
+        });
+        
+        //type specific information
+        match object.ui_object_type {
+            UIObjectType::PlainBox(x_length, y_length, z_length) => {
+                //dimensions
+                ui.horizontal_top(|ui| {
+                    let mut dim_x_string = x_length.to_string();
+                    let mut dim_y_string = y_length.to_string();
+                    let mut dim_z_string = z_length.to_string();
+                    ui.label("Object Dimensions: (x:");
+                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_x_string));
+                    ui.label("y:");
+                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_y_string));
+                    ui.label("z:");
+                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_z_string));
+                    ui.label(")");
+
+                    if dim_x_string.parse::<f32>().is_ok() {
+                        let new_length_x = dim_x_string.parse::<f32>().unwrap();
+                        if new_length_x >= 0.0 && new_length_x != x_length {
+                            object.ui_object_type = UIObjectType::PlainBox(new_length_x, y_length, z_length);
+                        }
+                    }
+                    if dim_y_string.parse::<f32>().is_ok() {
+                        let new_length_y = dim_y_string.parse::<f32>().unwrap();
+                        if new_length_y >= 0.0 && new_length_y != y_length {
+                            object.ui_object_type = UIObjectType::PlainBox(x_length, new_length_y, z_length);
+                        }
+                    }
+                    if dim_z_string.parse::<f32>().is_ok() {
+                        let new_length_z = dim_z_string.parse::<f32>().unwrap();
+                        if new_length_z >= 0.0 && new_length_z != z_length {
+                            object.ui_object_type = UIObjectType::PlainBox(x_length, y_length, new_length_z);
+                        }
+                    }
+                });
+            }
+            UIObjectType::Sphere(radius) => {
+                //radius
+                ui.horizontal_top(|ui| {
+                    let mut radius_string = radius.to_string();
+                    ui.label("Radius: ");
+                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut radius_string));
+                    
+                    if radius_string.parse::<f32>().is_ok() {
+                        let new_radius = radius_string.parse::<f32>().unwrap();
+                        if new_radius >= 0.0 {
+                            object.ui_object_type = UIObjectType::Sphere(new_radius);
+                        }
+                    }
+                });
+            }
+        }
     }
     
     /// Generates the image in which the render result will be stored as soon as the CustomImage is 
@@ -361,13 +490,14 @@ impl App {
         }
 
         let mut uniforms = shader::RaytracingUniforms{
-            aabbs: Arc::new(vec![
-                shader::Aabb::new_box(&point![-1.5, 0.0, 1.0], 0.25, 3.0, 3.0),
-                shader::Aabb::new_sphere(&point![0.0, 0.0, 1.0], 1.0),
-                shader::Aabb::new_sphere(&point![1.0, 0.0, 1.0], 1.0),
-
-                shader::Aabb::new_box(&point![0.0, -1.0, 0.0], 50.0, 0.1, 50.0),
-            ]),
+            // aabbs: Arc::new(vec![
+            //     shader::Aabb::new_box(&point![-1.5, 0.0, 1.0], 0.25, 3.0, 3.0),
+            //     shader::Aabb::new_sphere(&point![0.0, 0.0, 1.0], 1.0),
+            //     shader::Aabb::new_sphere(&point![1.0, 0.0, 1.0], 1.0),
+            // 
+            //     shader::Aabb::new_box(&point![0.0, -1.0, 0.0], 50.0, 0.1, 50.0),
+            // ]),
+            aabbs: Arc::new(self.ui_values.ui_objects.iter().map(|o| o.into()).collect()),
             lights: Arc::new(self.ui_values.ui_lights.iter().map(|uil| uil.into()).collect()),
             camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
@@ -421,15 +551,23 @@ struct UIFields {
     nbr_of_iterations: u32,
     nbr_of_threads: usize,
     tab: UiTab,
-    after_ui_actions: Vec<AfterUIActions>,
+    after_ui_action: Option<AfterUIActions>,
     ui_camera: UICamera,
     ui_lights: Vec<UILight>, 
+    ui_objects: Vec<UIObject>,
 }
 impl Default for UIFields {
     fn default() -> Self {
         let ui_lights = vec![
             UILight::new(0.0, 2.0, -1.0, 10.0),
             UILight::new(0.0, 1_000.0, 0.0, 1_000_000.0),
+        ];
+        
+        let ui_objects = vec![
+            UIObject::new(-1.5, 0.0, 1.0, UIObjectType::PlainBox(0.25, 3.0, 3.0)),
+            UIObject::new(0.0, 0.0, 1.0, UIObjectType::Sphere(1.0)),
+            UIObject::new(1.0, 0.0, 1.0, UIObjectType::Sphere(1.0)),
+            UIObject::new(0.0, -1.0, 0.0, UIObjectType::PlainBox(50.0, 0.1, 50.0)),
         ];
         
         Self {
@@ -439,9 +577,10 @@ impl Default for UIFields {
             nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
             nbr_of_threads: NBR_OF_THREADS_DEFAULT,
             tab: UiTab::Settings,
-            after_ui_actions: Vec::new(),
+            after_ui_action: None,
             ui_camera: UICamera::default(),
             ui_lights,
+            ui_objects,
         }
     }
 }
@@ -493,6 +632,63 @@ impl Default for UICamera {
     }
 }
 
+/// The UIObject struct represents an object in the scene, bound in an AABB, in its primitive UI
+/// form. The UI form allows for easier manipulation through the UI, for rendering it is later
+/// assembled into a proper AABB. <br>
+/// The struct holds the position as well as more type specific data.
+struct UIObject {
+    pos_x: f32,
+    pos_y: f32,
+    pos_z: f32,
+    ui_object_type: UIObjectType,
+}
+
+impl UIObject {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, ui_object_type: UIObjectType) -> Self {
+        Self {
+            pos_x,
+            pos_y,
+            pos_z,
+            ui_object_type,
+        }
+    }
+}
+
+impl Display for UIObject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self.ui_object_type {
+            UIObjectType::PlainBox(_, _, _) => "Plain Box",
+            UIObjectType::Sphere(_) => "Sphere",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl Default for UIObject {
+    fn default() -> Self {
+        Self {
+            pos_x: 0.0, 
+            pos_y: 0.0, 
+            pos_z: 0.0,
+            ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
+        }
+    }
+}
+
+enum UIObjectType {
+    PlainBox(f32, f32, f32),
+    Sphere(f32),
+}
+
+impl UIObjectType {
+    fn default_plain_box() -> Self {
+        UIObjectType::PlainBox(2.0, 2.0, 2.0)
+    }
+    
+    fn default_sphere() -> Self {
+        UIObjectType::Sphere(1.0)
+    }
+}
 
 /// This enum differentiates which tab is currently displayed in the apps main content window. 
 enum UiTab {
@@ -505,6 +701,7 @@ enum UiTab {
 /// as deleting objects. 
 enum AfterUIActions {
     DeleteLight(usize),
+    DeleteObject(usize),
 }
 
 impl eframe::App for App {
@@ -573,13 +770,14 @@ impl eframe::App for App {
                 }
                 UiTab::Objects => {
                     egui::ScrollArea::vertical().show(ui, |ui| {
+                        //camera settings
                         ui.label("Camera:");
                         egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                             self.display_camera_settings(ui);
                         });
-                        
                         ui.add_space(10.0);
                         
+                        //Light sources management
                         ui.vertical_centered(|ui| {
                             ui.horizontal_top(|ui| {
                                 ui.label("Light Sources:");
@@ -593,6 +791,24 @@ impl eframe::App for App {
                         for index in 0..self.ui_values.ui_lights.len() {
                             egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                                 self.display_light_source_settings(ui, index);
+                            });
+                        }
+                        ui.add_space(10.0);
+                        
+                        //Objects management
+                        ui.vertical_centered(|ui| {
+                            ui.horizontal_top(|ui| {
+                                ui.label("Objects:");
+                                ui.add_space(100.0);
+                                if ui.button("Add New Object").clicked() {
+                                    let object = UIObject::default();
+                                    self.ui_values.ui_objects.push(object);
+                                }
+                            });
+                        });
+                        for index in 0..self.ui_values.ui_objects.len() {
+                            egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                self.display_objects_settings(ui, index);
                             });
                         }
                     });
@@ -621,15 +837,15 @@ impl eframe::App for App {
 
         //ui is finished drawing, but some actions have to be done after this point such as deleting
         //elements with a button press. 
-        let mut lights_deleted = 0;
-        for action in &self.ui_values.after_ui_actions {
-            match action {
+        if self.ui_values.after_ui_action.is_some() {
+            match self.ui_values.after_ui_action.take().unwrap() {
                 AfterUIActions::DeleteLight(index) => {
-                    self.ui_values.ui_lights.remove(*index - lights_deleted);
-                    lights_deleted += 1;
+                    self.ui_values.ui_lights.remove(index);
+                }
+                AfterUIActions::DeleteObject(index) => {
+                    self.ui_values.ui_objects.remove(index);
                 }
             }
         }
-        self.ui_values.after_ui_actions.clear();
     }
 }

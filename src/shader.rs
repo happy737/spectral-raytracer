@@ -1,7 +1,7 @@
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
-use crate::{shader, UICamera, UILight};
+use crate::{shader, UICamera, UILight, UIObject, UIObjectType};
 
 const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
@@ -108,6 +108,20 @@ impl Aabb {
 enum AABBType {
     PlainBox,
     Sphere,
+}
+
+impl From<&UIObject> for Aabb {
+    fn from(value: &UIObject) -> Self {
+        let pos = point![value.pos_x, value.pos_y, value.pos_z];
+        match value.ui_object_type {
+            UIObjectType::PlainBox(x_length, y_length, z_length) => {
+                Aabb::new_box(&pos, x_length, y_length, z_length)
+            }
+            UIObjectType::Sphere(radius) => {
+                Aabb::new_sphere(&pos, radius)
+            }
+        }
+    }
 }
 
 pub (crate) struct Light {
