@@ -1,9 +1,10 @@
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
+use log::info;
 use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
 use crate::{shader, UICamera, UILight, UIObject, UIObjectType};
 
-const F32_DELTA: f32 = 0.00001;
+pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
 
 /// The position of the pixel on the screen. (0, 0) is the top left. 
@@ -147,14 +148,16 @@ impl From<&UILight> for Light {
 pub (crate) struct Camera {
     pub position: Point3<f32>,
     pub direction: Vector3<f32>,
+    pub up: Vector3<f32>,
     pub fov_y_deg: f32,
 }
 
 impl Camera {
-    pub fn new(position: Point3<f32>, direction: Vector3<f32>, fov_y_deg: f32) -> Camera {
+    pub fn new(position: Point3<f32>, direction: Vector3<f32>, up: Vector3<f32>, fov_y_deg: f32) -> Camera {
         Camera {
             position, 
             direction, 
+            up,
             fov_y_deg,
         }
     }
@@ -173,6 +176,11 @@ impl From<&UICamera> for Camera {
                     ui_camera.dir_y, 
                     ui_camera.dir_z
                 ],
+            vector![
+                ui_camera.up_x,
+                ui_camera.up_y,
+                ui_camera.up_z,
+            ],
             ui_camera.fov_deg_y)
     }
 }
@@ -192,8 +200,14 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let y = -((y / height) * 2.0 - 1.0);
     let x = ((x / width) * 2.0 - 1.0) * aspect_ratio;
     
-    //TODO do something with the camera position and direction arguments
-    let mut ray = Ray::new(Point3::new(x, y, 0.0), Vector3::new(x, y, focal_distance), NEW_RAY_MAX_BOUNCES, pos);
+    let up = uniforms.camera.up.normalize();
+    let forward = uniforms.camera.direction.normalize();
+    let right = forward.cross(&up).normalize(); //forward x up  
+    let true_up = right.cross(&forward);
+    let dir = forward * focal_distance - right * x + true_up * y;   //no idea why - but it works correct this way
+    let dir = dir.normalize();
+
+    let mut ray = Ray::new(uniforms.camera.position, dir, NEW_RAY_MAX_BOUNCES, pos);
     submit_ray(&mut ray, uniforms);
 
     (ray.intensity, ray.intensity, ray.intensity)

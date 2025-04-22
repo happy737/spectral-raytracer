@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
 use image::{DynamicImage, ImageBuffer};
-use log::{info, warn};
+use log::{error, info, warn};
+use nalgebra::Vector3;
 use threadpool::ThreadPool;
 use crate::shader::PixelPos;
 
@@ -133,6 +134,12 @@ impl App {
             ui.horizontal_top(|ui| {
                 ui.label("Number of parallel threads:");
                 ui.add(egui::Slider::new(&mut self.ui_values.nbr_of_threads, 1..=NBR_OF_THREADS_MAX));
+                if ui.button(" - ").clicked() {
+                    self.ui_values.nbr_of_threads -= 1;
+                }
+                if ui.button(" + ").clicked() {
+                    self.ui_values.nbr_of_threads += 1;
+                }
             });
         });
     }
@@ -160,7 +167,7 @@ impl App {
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
             ui.label("z:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
-            ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+            ui.label(")"); 
 
             if pos_x_string.parse::<f32>().is_ok() {
                 self.ui_values.ui_camera.pos_x = pos_x_string.parse::<f32>().unwrap();
@@ -185,7 +192,7 @@ impl App {
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_y_string));
             ui.label("z:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_z_string));
-            ui.label(") CURRENTLY DOES NOTHING");   //TODO remove as soon as wrong
+            ui.label(")"); 
 
             if dir_x_string.parse::<f32>().is_ok() {
                 self.ui_values.ui_camera.dir_x = dir_x_string.parse::<f32>().unwrap();
@@ -195,6 +202,31 @@ impl App {
             }
             if dir_z_string.parse::<f32>().is_ok() {
                 self.ui_values.ui_camera.dir_z = dir_z_string.parse::<f32>().unwrap();
+            }
+        });
+        
+        //camera up direction
+        ui.horizontal_top(|ui| {
+            let mut up_x_string = self.ui_values.ui_camera.up_x.to_string();
+            let mut up_y_string = self.ui_values.ui_camera.up_y.to_string();
+            let mut up_z_string = self.ui_values.ui_camera.up_z.to_string();
+            
+            ui.label("Camera Up: (x:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_x_string));
+            ui.label("y:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_y_string));
+            ui.label("z:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_z_string));
+            ui.label(")");
+            
+            if up_x_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.up_x = up_x_string.parse::<f32>().unwrap();
+            }
+            if up_y_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.up_y = up_y_string.parse::<f32>().unwrap();
+            }
+            if up_z_string.parse::<f32>().is_ok() {
+                self.ui_values.ui_camera.up_z = up_z_string.parse::<f32>().unwrap();
             }
         });
         
@@ -490,18 +522,18 @@ impl App {
         }
 
         let mut uniforms = shader::RaytracingUniforms{
-            // aabbs: Arc::new(vec![
-            //     shader::Aabb::new_box(&point![-1.5, 0.0, 1.0], 0.25, 3.0, 3.0),
-            //     shader::Aabb::new_sphere(&point![0.0, 0.0, 1.0], 1.0),
-            //     shader::Aabb::new_sphere(&point![1.0, 0.0, 1.0], 1.0),
-            // 
-            //     shader::Aabb::new_box(&point![0.0, -1.0, 0.0], 50.0, 0.1, 50.0),
-            // ]),
             aabbs: Arc::new(self.ui_values.ui_objects.iter().map(|o| o.into()).collect()),
             lights: Arc::new(self.ui_values.ui_lights.iter().map(|uil| uil.into()).collect()),
             camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
         };
+        
+        let dependent = are_linear_dependent(&uniforms.camera.direction, &uniforms.camera.up);
+        if dependent {
+            error!("View Direction and Up Direction are linearly dependent! \nDir: {} Up: {}", 
+                &uniforms.camera.direction, &uniforms.camera.up);
+        }
+        assert!(!dependent);
         
         self.thread_pool.set_num_threads(self.ui_values.nbr_of_threads);
 
@@ -615,6 +647,9 @@ struct UICamera {
     dir_x: f32,
     dir_y: f32,
     dir_z: f32,
+    up_x: f32,
+    up_y: f32,
+    up_z: f32,
     fov_deg_y: f32,
 }
 
@@ -623,10 +658,13 @@ impl Default for UICamera {
         Self {
             pos_x: 0.0,
             pos_y: 0.0,
-            pos_z: 0.0,
+            pos_z: -2.0,
             dir_x: 0.0,
             dir_y: 0.0,
             dir_z: 1.0,
+            up_x: 0.0, 
+            up_y: 1.0, 
+            up_z: 0.0,
             fov_deg_y: 60.0,
         }
     }
@@ -702,6 +740,13 @@ enum UiTab {
 enum AfterUIActions {
     DeleteLight(usize),
     DeleteObject(usize),
+}
+
+/// Takes 2 3-dimensional vectors and checks if they are linearly dependent (point in the same 
+/// direction). This is done by checking if the cross product is (very close to) the 0 vector.
+fn are_linear_dependent(vec1: &Vector3<f32>, vec2: &Vector3<f32>) -> bool {
+    let cross = vec1.cross(vec2);
+    cross.x.abs() < shader::F32_DELTA && cross.y.abs() < shader::F32_DELTA && cross.z.abs() < shader::F32_DELTA
 }
 
 impl eframe::App for App {
