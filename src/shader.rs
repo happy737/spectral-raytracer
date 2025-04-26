@@ -1,8 +1,7 @@
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
-use log::info;
 use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
-use crate::{shader, UICamera, UILight, UIObject, UIObjectType};
+use crate::{UICamera, UILight, UIObject, UIObjectType};
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
