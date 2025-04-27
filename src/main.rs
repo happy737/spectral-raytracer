@@ -152,7 +152,7 @@ impl App {
     /// Shortcut function that generates and displays the time taken to render the image. 
     fn display_frame_generation_time(&mut self, ui: &mut Ui) {
         let s = match self.ui_values.frame_gen_time {
-            Some(s) => format!("{:?}", s),
+            Some(s) => format!("{:.3?}", s),
             None => "".to_string(),
         };
         ui.label(format!("Time to generate image: {s}"));
@@ -305,6 +305,9 @@ impl App {
         });
     }
     
+    /// Shortcut function to display the settings for a single Object in the scene. The settings 
+    /// can be changed and the updated values will be used in the rendering process. Each object is 
+    /// differentiated according to their type and the respective settings will be displayed. 
     fn display_objects_settings(&mut self, ui: &mut Ui, index: usize) {
         let object = &mut self.ui_values.ui_objects[index];
 
@@ -432,6 +435,21 @@ impl App {
                     }
                 });
             }
+        }
+    }
+
+    /// The displayed time how long an image has been rendered is updated in this method, if the 
+    /// app is currently rendering. 
+    fn refresh_rendering_time(&mut self) {
+        let rendering = self.currently_rendering.lock().unwrap();
+        if *rendering {
+            if self.rendering_since.is_none() {
+                self.rendering_since = Some(Instant::now());
+            }
+            let rendering_since = self.rendering_since.unwrap();
+            self.ui_values.frame_gen_time = Some(Instant::now() - rendering_since);
+        } else {
+            self.rendering_since = None;
         }
     }
     
@@ -830,7 +848,7 @@ impl eframe::App for App {
         //main content div. 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.horizontal_top(|ui| {    //TODO these buttons might be replaceable by frames with zero outer margin
+                ui.horizontal_top(|ui| {    //TODO these buttons might be replaceable by frames with zero outer margin //frames are not clickable, check workaround
                     if ui.button("Settings").clicked() {
                         self.ui_values.tab = UiTab::Settings;
                     }
@@ -901,21 +919,11 @@ impl eframe::App for App {
                 }
                 UiTab::Display => {
                     ui.horizontal_top(|ui| {
-                        {   //TODO refactor into own function
-                            let rendering = self.currently_rendering.lock().unwrap();
-                            if *rendering {
-                                if self.rendering_since.is_none() {
-                                    self.rendering_since = Some(Instant::now());
-                                }
-                                let rendering_since = self.rendering_since.unwrap();
-                                self.ui_values.frame_gen_time = Some(Instant::now() - rendering_since);
-                            } else {
-                                self.rendering_since = None;
-                            }
-                        }
-                        self.display_frame_generation_time(ui); //TODO cap to 3 digits or something
-                        ui.add(egui::ProgressBar::new(self.ui_values.progress_bar_progress));
-                        //TODO implement progress bars per frame
+                        self.refresh_rendering_time();
+                        self.display_frame_generation_time(ui);
+                        egui::Frame::NONE.inner_margin(5.0).show(ui, |ui| {
+                            ui.add(egui::ProgressBar::new(self.ui_values.progress_bar_progress));
+                        });
                     });
 
                     egui::Frame::NONE.fill(egui::Color32::GRAY).show(ui, |ui| {
