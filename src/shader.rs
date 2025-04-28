@@ -5,6 +5,7 @@ use crate::{UICamera, UILight, UIObject, UIObjectType};
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
+const NEW_RAY_POSITION_OFFSET_DISTANCE: f32 = 0.00001;
 
 /// The position of the pixel on the screen. (0, 0) is the top left. 
 #[derive(Copy, Clone)]
@@ -84,17 +85,19 @@ pub(crate) struct Aabb {
     min: Point3<f32>,
     max: Point3<f32>,
     aabb_type: AABBType,
+    metallicness: bool,  //TODO remake as f32, but now only totally diffuse or totally metallic
 }
 impl Aabb {
-    pub fn new_sphere(center: &Point3<f32>, radius: f32) -> Aabb {
+    pub fn new_sphere(center: &Point3<f32>, radius: f32, metallicness: bool) -> Aabb {
         Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
             max: point![center.x + radius, center.y + radius, center.z + radius],
             aabb_type: AABBType::Sphere,
+            metallicness,
         }
     }
     
-    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32) -> Aabb {
+    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, metallicness: bool) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
         let z_half = z_length / 2.0;
@@ -102,6 +105,7 @@ impl Aabb {
             min: point![center.x - x_half, center.y - y_half, center.z - z_half],
             max: point![center.x + x_half, center.y + y_half, center.z + z_half],
             aabb_type: AABBType::PlainBox,
+            metallicness,
         }
     }
 }
@@ -115,10 +119,10 @@ impl From<&UIObject> for Aabb {
         let pos = point![value.pos_x, value.pos_y, value.pos_z];
         match value.ui_object_type {
             UIObjectType::PlainBox(x_length, y_length, z_length) => {
-                Aabb::new_box(&pos, x_length, y_length, z_length)
+                Aabb::new_box(&pos, x_length, y_length, z_length, value.metallicness)
             }
             UIObjectType::Sphere(radius) => {
-                Aabb::new_sphere(&pos, radius)
+                Aabb::new_sphere(&pos, radius, value.metallicness)
             }
         }
     }
@@ -257,6 +261,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     ray.hit = true;
     ray.hit_distance = ray_intersection_length;
     
+    //determining position and normal of the hit
     let intersection_point = ray.origin + ray.direction * ray_intersection_length;
     let normal= match aabb.aabb_type {
         AABBType::PlainBox => {
@@ -269,31 +274,50 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         }
     };
 
-    let new_shot_rays_pos = intersection_point + normal * 0.00001;
+    //a new ray is shot slightly above the hit position because of floating point imprecision in 
+    //order not to intersect at the hit position
+    let new_shot_rays_pos = intersection_point + normal * NEW_RAY_POSITION_OFFSET_DISTANCE;
     
+    
+    //calculating how much light hits this point
     let mut received_intensity = 0f32;
-    for light in uniforms.lights.iter() {
-        let direction = light.position - new_shot_rays_pos;
-        let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction);
-        submit_ray(&mut shadow_ray, uniforms);
-        if !shadow_ray.hit {
-            let distance_adjusted = light.intensity / direction.magnitude_squared();
-            let normal_adjusted = shadow_ray.direction.normalize().dot(&normal)
-                .clamp(0.0, f32::INFINITY) * distance_adjusted;
-            received_intensity += normal_adjusted;
-        }
-    }
     
-    if ray.max_bounces > 1 {
-        let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x, 
-                                                   ray.original_pixel_pos.y, uniforms.frame_id);
-        let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
-        let mut new_ray = Ray::new(intersection_point, new_direction, 
-                               ray.max_bounces - 1, ray.original_pixel_pos);
-        submit_ray(&mut new_ray, uniforms);
-        
-        let distance_adjustment = 1.0 / (new_ray.hit_distance * new_ray.hit_distance);
-        received_intensity += new_ray.intensity * new_direction.dot(&normal) //* distance_adjustment;   //TODO I think this is necessary but IDK
+    if aabb.metallicness {
+        if ray.max_bounces > 1 {
+            let direction = reflect_vec(&ray.direction, &normal);
+            let mut new_ray = Ray::new(new_shot_rays_pos, direction, 
+                                       ray.max_bounces - 1, ray.original_pixel_pos);
+            submit_ray(&mut new_ray, uniforms);
+
+            received_intensity += new_ray.intensity;
+        }   //else just simply black 
+    } else {
+        //direct light contributions via light sources
+        //important: ONLY HERE is the light intensity divided by distance squared, reflected rays
+        //have already paid the square tax. 
+        for light in uniforms.lights.iter() {   //TODO some reflective fuckyness is going on here. See early_reflection.png
+            let direction = light.position - new_shot_rays_pos;
+            let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction);
+            submit_ray(&mut shadow_ray, uniforms);
+            if !shadow_ray.hit {
+                let distance_adjusted = light.intensity / direction.magnitude_squared();
+                let normal_adjusted = shadow_ray.direction.normalize().dot(&normal)
+                    .clamp(0.0, f32::INFINITY) * distance_adjusted;
+                received_intensity += normal_adjusted;
+            }
+        }
+
+        //indirect light contribution (diffuse - random - light ray bounces)
+        // if ray.max_bounces > 1 {
+        //     let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x, 
+        //                                                ray.original_pixel_pos.y, uniforms.frame_id);
+        //     let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
+        //     let mut new_ray = Ray::new(intersection_point, new_direction, 
+        //                            ray.max_bounces - 1, ray.original_pixel_pos);
+        //     submit_ray(&mut new_ray, uniforms);
+        //     
+        //     received_intensity += new_ray.intensity * new_direction.dot(&normal);
+        // }
     }
     
     ray.intensity = received_intensity * (-ray.direction).dot(&normal);
@@ -497,4 +521,9 @@ fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
     let bi_tangent = normal.cross(&vec_tangent);
 
     Matrix3::from_columns(&[vec_tangent, *normal, bi_tangent])
+}
+
+///TODO reflects vector but what direction does incident have to be?
+fn reflect_vec(incident: &Vector3<f32>, normal: &Vector3<f32>) -> Vector3<f32> {
+    incident - 2.0 * normal.dot(incident) * normal
 }

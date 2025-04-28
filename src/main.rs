@@ -654,10 +654,10 @@ impl Default for UIFields {
         ];
         
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, UIObjectType::PlainBox(0.25, 3.0, 3.0)),
-            UIObject::new(0.0, 0.0, 1.0, UIObjectType::Sphere(1.0)),
-            UIObject::new(1.0, 0.0, 1.0, UIObjectType::Sphere(1.0)),
-            UIObject::new(0.0, -1.0, 0.0, UIObjectType::PlainBox(50.0, 0.1, 50.0)),
+            UIObject::new(-1.5, 0.0, 1.0, true, UIObjectType::PlainBox(0.25, 3.0, 3.0)),
+            UIObject::new(0.0, 0.0, 1.0, false, UIObjectType::Sphere(1.0)),
+            UIObject::new(1.0, 0.0, 1.0, false, UIObjectType::Sphere(1.0)),
+            UIObject::new(0.0, -1.0, 0.0, false, UIObjectType::PlainBox(50.0, 0.1, 50.0)),
         ];
         
         Self {
@@ -737,15 +737,17 @@ struct UIObject {
     pos_x: f32,
     pos_y: f32,
     pos_z: f32,
+    metallicness: bool, 
     ui_object_type: UIObjectType,
 }
 
 impl UIObject {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, ui_object_type: UIObjectType) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, ui_object_type: UIObjectType) -> Self {
         Self {
             pos_x,
             pos_y,
             pos_z,
+            metallicness, 
             ui_object_type,
         }
     }
@@ -767,6 +769,7 @@ impl Default for UIObject {
             pos_x: 0.0, 
             pos_y: 0.0, 
             pos_z: 0.0,
+            metallicness: false,
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
         }
     }
@@ -912,7 +915,7 @@ impl eframe::App for App {
                         });
                         for index in 0..self.ui_values.ui_objects.len() {
                             egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
-                                self.display_objects_settings(ui, index);
+                                self.display_objects_settings(ui, index);   //TODO ui setting for reflectivity
                             });
                         }
                     });
