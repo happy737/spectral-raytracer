@@ -1,11 +1,12 @@
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
-use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
+use nalgebra::{matrix, point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
 use crate::{UICamera, UILight, UIObject, UIObjectType};
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
 const NEW_RAY_POSITION_OFFSET_DISTANCE: f32 = 0.00001;
+const HAMMERSLEY_OFFSET_SCALE: f32 = 0.001;
 
 /// The position of the pixel on the screen. (0, 0) is the top left. 
 #[derive(Copy, Clone)]
@@ -28,6 +29,7 @@ pub struct RaytracingUniforms {
     pub(crate) lights: Arc<Vec<Light>>,
     pub(crate) camera: Camera,
     pub(crate) frame_id: u32,
+    pub(crate) intended_frames_amount: u32,
 }
 
 /// The struct representing the ray that is shot through the scene. It contains information about
@@ -198,16 +200,17 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let fov_half_rad = (uniforms.camera.fov_y_deg / 2.0) / 180.0 * PI;
     let focal_distance = 1.0 / fov_half_rad.tan();
     
-    //let pixel_offset = hammersley(frame_number, dim.width * dim.height);  //TODO implement differing positions from multiple frames
+    let (pixel_offset_x, pixel_offset_y) = 
+        hammersley(uniforms.frame_id, uniforms.intended_frames_amount);
     
-    let y = -((y / height) * 2.0 - 1.0);
-    let x = ((x / width) * 2.0 - 1.0) * aspect_ratio;
+    let y = -((y / height) * 2.0 - 1.0) + pixel_offset_x * HAMMERSLEY_OFFSET_SCALE; //TODO this can be calculated smarter than a constant
+    let x = ((x / width) * 2.0 - 1.0) * aspect_ratio + pixel_offset_y * HAMMERSLEY_OFFSET_SCALE;
     
     let up = uniforms.camera.up.normalize();
     let forward = uniforms.camera.direction.normalize();
     let right = forward.cross(&up).normalize(); //forward x up  
     let true_up = right.cross(&forward);
-    let dir = forward * focal_distance - right * x + true_up * y;   //no idea why - but it works correct this way
+    let dir = forward * focal_distance - right * x + true_up * y;   //no idea why the - but it works correct this way
     let dir = dir.normalize();
 
     let mut ray = Ray::new(uniforms.camera.position, dir, NEW_RAY_MAX_BOUNCES, pos);
@@ -280,7 +283,8 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     
     
     //calculating how much light hits this point
-    let mut received_intensity = 0f32;
+    let mut diffuse_received_intensity = 0f32;
+    let mut specular_received_intensity = 0f32;
     
     if aabb.metallicness {
         if ray.max_bounces > 1 {
@@ -289,7 +293,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                                        ray.max_bounces - 1, ray.original_pixel_pos);
             submit_ray(&mut new_ray, uniforms);
 
-            received_intensity += new_ray.intensity;
+            specular_received_intensity += new_ray.intensity;
         }   //else just simply black 
     } else {
         //direct light contributions via light sources
@@ -303,24 +307,40 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                 let distance_adjusted = light.intensity / direction.magnitude_squared();
                 let normal_adjusted = shadow_ray.direction.normalize().dot(&normal)
                     .clamp(0.0, f32::INFINITY) * distance_adjusted;
-                received_intensity += normal_adjusted;
+                diffuse_received_intensity += normal_adjusted * (-ray.direction).dot(&normal);
             }
         }
 
         //indirect light contribution (diffuse - random - light ray bounces)
-        // if ray.max_bounces > 1 {
-        //     let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x, 
-        //                                                ray.original_pixel_pos.y, uniforms.frame_id);
-        //     let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
-        //     let mut new_ray = Ray::new(intersection_point, new_direction, 
-        //                            ray.max_bounces - 1, ray.original_pixel_pos);
-        //     submit_ray(&mut new_ray, uniforms);
-        //     
-        //     received_intensity += new_ray.intensity * new_direction.dot(&normal);
-        // }
+        if ray.max_bounces > 1 {
+            let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,
+                                                       ray.original_pixel_pos.y, uniforms.frame_id);
+            let theta = 0.5 * PI * random_x;
+            let phi = 2.0 * PI * random_y;
+            let local_direction = vector![theta.sin() * phi.cos(), theta.sin() * phi.sin(), theta.cos()];
+            let new_direction = get_normal_space2(&normal) * local_direction;
+            //let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
+            let mut new_ray = Ray::new(intersection_point, new_direction,
+                                   ray.max_bounces - 1, ray.original_pixel_pos);
+            submit_ray(&mut new_ray, uniforms);
+
+            diffuse_received_intensity += (new_ray.intensity * PI * theta.cos() * theta.sin()).max(0.0);
+        }
     }
-    
-    ray.intensity = received_intensity * (-ray.direction).dot(&normal);
+    const COLOR: f32 = 0.7;
+    ray.intensity = COLOR * (diffuse_received_intensity + specular_received_intensity);
+}
+
+/// https://www.gsn-lib.org/apps/raytracing/index.php?name=example_emissivesphere
+fn get_normal_space2(normal: &Vector3<f32>) -> Matrix3<f32> {
+    let some_vec = Vector3::<f32>::new(1.0, 0.0, 0.0);
+    let dd = some_vec.dot(normal);
+    let mut tangent = Vector3::<f32>::new(0.0, 1.0, 0.0);
+    if 1.0 - dd.abs() > F32_DELTA {
+        tangent = some_vec.cross(normal).normalize()
+    }
+    let bi_tangent = normal.cross(&tangent);
+    Matrix3::from_columns(&[tangent, bi_tangent, *normal])
 }
 
 /// The miss shader. It is called on a submitted ray if this ray does ultimately not hit anything. 

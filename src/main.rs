@@ -14,8 +14,8 @@ use threadpool::ThreadPool;
 use crate::shader::{PixelPos, RaytracingUniforms};
 
 const NBR_OF_THREADS_DEFAULT: usize = 20;
-const NBR_OF_THREADS_MAX: usize = 50;
-const NBR_OF_ITERATIONS_DEFAULT: u32 = 32;
+const NBR_OF_THREADS_MAX: usize = 64;
+const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
 
 fn main() -> eframe::Result {
     //Set up logging for the project
@@ -573,6 +573,7 @@ impl App {
             lights: Arc::new(self.ui_values.ui_lights.iter().map(|l| l.into()).collect()),
             camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
+            intended_frames_amount: self.ui_values.nbr_of_iterations,
         };
         
         //input validation
@@ -665,7 +666,7 @@ impl Default for UIFields {
             height: 400,
             frame_gen_time: None,
             nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
-            nbr_of_threads: NBR_OF_THREADS_DEFAULT,
+            nbr_of_threads: determine_optimal_thread_count(),
             tab: UiTab::Settings,
             after_ui_action: None,
             ui_camera: UICamera::default(),
@@ -809,6 +810,22 @@ enum AfterUIActions {
 fn are_linear_dependent(vec1: &Vector3<f32>, vec2: &Vector3<f32>) -> bool {
     let cross = vec1.cross(vec2);
     cross.x.abs() < shader::F32_DELTA && cross.y.abs() < shader::F32_DELTA && cross.z.abs() < shader::F32_DELTA
+}
+
+/// Queries rusts API to determine the optimal amount of parallel threads used for computations 
+/// ([thread::available_parallelism]). Should this call fail [a default](NBR_OF_THREADS_DEFAULT) is 
+/// returned instead and the error is logged. 
+fn determine_optimal_thread_count() -> usize {
+    match thread::available_parallelism() {
+        Ok(num) => { 
+            num.into() 
+        }
+        Err(error) => {
+            error!("An error occurred while trying to determine the optimal amount of used virtual cores! Using sub-optimal default instead.");
+            error!("{}", error);
+            NBR_OF_THREADS_DEFAULT
+        }
+    }
 }
 
 impl eframe::App for App {
