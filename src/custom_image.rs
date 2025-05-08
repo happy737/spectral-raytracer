@@ -92,6 +92,7 @@ impl CustomImage {
 impl From<CustomImage> for DynamicImage {
     fn from(value: CustomImage) -> Self {
         let data_as_bytes = value.data.into_iter().map(|mut float| {
+            float = float.clamp(0.0, 1.0);
             float *= 255.0;
             float as u8
         }).collect::<Vec<u8>>();

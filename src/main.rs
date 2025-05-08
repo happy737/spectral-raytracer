@@ -384,6 +384,12 @@ impl App {
             }
         });
         
+        //metallicness
+        ui.horizontal_top(|ui| {
+            ui.label("Metallic?");
+            ui.checkbox(&mut object.metallicness, "");
+        });
+        
         //type specific information
         match object.ui_object_type {
             UIObjectType::PlainBox(x_length, y_length, z_length) => {

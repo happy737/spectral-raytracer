@@ -313,9 +313,9 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
 
         //indirect light contribution (diffuse - random - light ray bounces)
         if ray.max_bounces > 1 {
-            let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,
+            let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,    //TODO do infront of if and use third random for metallicness
                                                        ray.original_pixel_pos.y, uniforms.frame_id);
-            let theta = 0.5 * PI * random_x;
+            let theta = random_x.sqrt().asin(); //importance sampling of a sphere, therefore no direction correction necessary later
             let phi = 2.0 * PI * random_y;
             let local_direction = vector![theta.sin() * phi.cos(), theta.sin() * phi.sin(), theta.cos()];
             let new_direction = get_normal_space2(&normal) * local_direction;
@@ -324,7 +324,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                                    ray.max_bounces - 1, ray.original_pixel_pos);
             submit_ray(&mut new_ray, uniforms);
 
-            diffuse_received_intensity += (new_ray.intensity * PI * theta.cos() * theta.sin()).max(0.0);
+            diffuse_received_intensity += (new_ray.intensity /* PI * theta.cos() * theta.sin()*/).max(0.0); //no direction correction here
         }
     }
     const COLOR: f32 = 0.7;
