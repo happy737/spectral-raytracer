@@ -1,7 +1,8 @@
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
-use nalgebra::{matrix, point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
+use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
 use crate::{UICamera, UILight, UIObject, UIObjectType};
+use crate::spectrum::Spectrum;
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
@@ -30,6 +31,7 @@ pub struct RaytracingUniforms {
     pub(crate) camera: Camera,
     pub(crate) frame_id: u32,
     pub(crate) intended_frames_amount: u32,
+    pub(crate) example_spectrum: Spectrum,
 }
 
 /// The struct representing the ray that is shot through the scene. It contains information about
@@ -38,7 +40,7 @@ struct Ray {
     origin: Point3<f32>,
     direction: Vector3<f32>,
     hit: bool,
-    intensity: f32,
+    spectrum: Spectrum,
     skip_hit_shader: bool,
     max_bounces: u32,
     original_pixel_pos: PixelPos,
@@ -48,12 +50,12 @@ impl Ray {
     /// Creates a new standard Ray with default values for the values which will be written to in 
     /// the shaders. 
     fn new(origin: Point3<f32>, direction: Vector3<f32>, max_bounces: u32, 
-           original_pixel_pos: PixelPos) -> Ray {
+           original_pixel_pos: PixelPos, example_spectrum: &Spectrum) -> Ray {
         Ray {
             origin,
             direction: direction.normalize(),
             hit: false,
-            intensity: 0.0,
+            spectrum: Spectrum::new_equal_size_empty_spectrum(example_spectrum),
             skip_hit_shader: false,
             max_bounces,
             original_pixel_pos,
@@ -65,12 +67,12 @@ impl Ray {
     /// can thus be used to determine if an unobstructed line to another point exists. The 
     /// closest-hit shader will not be executed for this ray. The field hit will be set to true if 
     /// anything is hit. 
-    fn new_shadow_ray(origin: Point3<f32>, direction: Vector3<f32>) -> Ray {
+    fn new_shadow_ray(origin: Point3<f32>, direction: Vector3<f32>, example_spectrum: &Spectrum) -> Ray {
         Ray {
             origin, 
             direction,
             hit: false,
-            intensity: 0.0,
+            spectrum: Spectrum::new_equal_size_empty_spectrum(example_spectrum),    //TODO maybe refactor this out
             skip_hit_shader: true,
             max_bounces: 1, //technically unnecessary
             original_pixel_pos: PixelPos {x:0, y:0},    //dummy value
@@ -87,19 +89,21 @@ pub(crate) struct Aabb {
     min: Point3<f32>,
     max: Point3<f32>,
     aabb_type: AABBType,
+    spectrum: Spectrum,
     metallicness: bool,  //TODO remake as f32, but now only totally diffuse or totally metallic
-}
+}   //TODO refactor material info into single struct "material"
 impl Aabb {
-    pub fn new_sphere(center: &Point3<f32>, radius: f32, metallicness: bool) -> Aabb {
+    pub fn new_sphere(center: &Point3<f32>, radius: f32, spectrum: Spectrum, metallicness: bool) -> Aabb {
         Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
             max: point![center.x + radius, center.y + radius, center.z + radius],
             aabb_type: AABBType::Sphere,
+            spectrum,
             metallicness,
         }
     }
     
-    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, metallicness: bool) -> Aabb {
+    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, spectrum: Spectrum, metallicness: bool) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
         let z_half = z_length / 2.0;
@@ -107,6 +111,7 @@ impl Aabb {
             min: point![center.x - x_half, center.y - y_half, center.z - z_half],
             max: point![center.x + x_half, center.y + y_half, center.z + z_half],
             aabb_type: AABBType::PlainBox,
+            spectrum,
             metallicness,
         }
     }
@@ -121,10 +126,10 @@ impl From<&UIObject> for Aabb {
         let pos = point![value.pos_x, value.pos_y, value.pos_z];
         match value.ui_object_type {
             UIObjectType::PlainBox(x_length, y_length, z_length) => {
-                Aabb::new_box(&pos, x_length, y_length, z_length, value.metallicness)
+                Aabb::new_box(&pos, x_length, y_length, z_length, value.spectrum.clone(), value.metallicness)
             }
             UIObjectType::Sphere(radius) => {
-                Aabb::new_sphere(&pos, radius, value.metallicness)
+                Aabb::new_sphere(&pos, radius, value.spectrum.clone(), value.metallicness)
             }
         }
     }
@@ -132,20 +137,20 @@ impl From<&UIObject> for Aabb {
 
 pub (crate) struct Light {
     position: Point3<f32>,
-    intensity: f32,
+    spectrum: Spectrum,
 }
 impl Light {
-    pub fn new(position: Point3<f32>, intensity: f32) -> Light {
+    pub fn new(position: Point3<f32>, spectrum: Spectrum) -> Light {
         Light {
             position,
-            intensity,
+            spectrum,
         }
     }
 }
 
 impl From<&UILight> for Light {
     fn from(value: &UILight) -> Self {
-        Light::new(point![value.pos_x, value.pos_y, value.pos_z], value.intensity)
+        Light::new(point![value.pos_x, value.pos_y, value.pos_z], value.spectrum.clone())
     }
 }
 
@@ -213,11 +218,12 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let dir = forward * focal_distance - right * x + true_up * y;   //no idea why the - but it works correct this way
     let dir = dir.normalize();
 
-    let mut ray = Ray::new(uniforms.camera.position, dir, NEW_RAY_MAX_BOUNCES, pos);
+    let mut ray = Ray::new(uniforms.camera.position, dir, NEW_RAY_MAX_BOUNCES, pos, &uniforms.example_spectrum);
     submit_ray(&mut ray, uniforms);
 
-    (ray.intensity, ray.intensity, ray.intensity)
+    ray.spectrum.to_rgb_early()
     //random_pcg3d(pos.x, pos.y, uniforms.frame_id)
+    //TODO dead center in the middle sphere is a big fat aliasing circle
 }
 
 fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
@@ -283,37 +289,44 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     
     
     //calculating how much light hits this point
-    let mut diffuse_received_intensity = 0f32;
-    let mut specular_received_intensity = 0f32;
+    let mut received_spectrum = Spectrum::new_equal_size_empty_spectrum(&ray.spectrum);
     
-    if aabb.metallicness {
+    if aabb.metallicness {  //TODO metallic rays cannot yet detect light sources
         if ray.max_bounces > 1 {
             let direction = reflect_vec(&ray.direction, &normal);
             let mut new_ray = Ray::new(new_shot_rays_pos, direction, 
-                                       ray.max_bounces - 1, ray.original_pixel_pos);
+                                       ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);
             submit_ray(&mut new_ray, uniforms);
 
-            specular_received_intensity += new_ray.intensity;
+            received_spectrum += &new_ray.spectrum;
         }   //else just simply black 
     } else {
         //direct light contributions via light sources
         //important: ONLY HERE is the light intensity divided by distance squared, reflected rays
-        //have already paid the square tax. 
+        // have already paid the square tax. 
         for light in uniforms.lights.iter() {   //TODO some reflective fuckyness is going on here. See early_reflection.png
             let direction = light.position - new_shot_rays_pos;
-            let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction);
+            let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction, &ray.spectrum);
             submit_ray(&mut shadow_ray, uniforms);
+            
             if !shadow_ray.hit {
-                let distance_adjusted = light.intensity / direction.magnitude_squared();
-                let normal_adjusted = shadow_ray.direction.normalize().dot(&normal)
-                    .clamp(0.0, f32::INFINITY) * distance_adjusted;
-                diffuse_received_intensity += normal_adjusted * (-ray.direction).dot(&normal);
+                //adjust strength for distance from light source
+                let mut adjusted = &light.spectrum / direction.magnitude_squared();
+                
+                //adjust for incoming ray angle
+                adjusted *= shadow_ray.direction.normalize().dot(&normal)
+                    .clamp(0.0, f32::INFINITY);
+                
+                //adjust for outgoing ray angle
+                adjusted *= (-ray.direction).dot(&normal).clamp(0.0, f32::INFINITY);
+                
+                received_spectrum += &adjusted;
             }
         }
 
         //indirect light contribution (diffuse - random - light ray bounces)
         if ray.max_bounces > 1 {
-            let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,    //TODO do infront of if and use third random for metallicness
+            let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,    //TODO do in front of if and use third random for metallicness
                                                        ray.original_pixel_pos.y, uniforms.frame_id);
             let theta = random_x.sqrt().asin(); //importance sampling of a sphere, therefore no direction correction necessary later
             let phi = 2.0 * PI * random_y;
@@ -321,14 +334,16 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
             let new_direction = get_normal_space2(&normal) * local_direction;
             //let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
             let mut new_ray = Ray::new(intersection_point, new_direction,
-                                   ray.max_bounces - 1, ray.original_pixel_pos);
+                                   ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);
             submit_ray(&mut new_ray, uniforms);
 
-            diffuse_received_intensity += (new_ray.intensity /* PI * theta.cos() * theta.sin()*/).max(0.0); //no direction correction here
+            new_ray.spectrum.max0();
+            //no direction correction here
+            received_spectrum += &new_ray.spectrum; 
         }
     }
-    const COLOR: f32 = 0.7;
-    ray.intensity = COLOR * (diffuse_received_intensity + specular_received_intensity);
+    
+    ray.spectrum = &aabb.spectrum * &received_spectrum;
 }
 
 /// https://www.gsn-lib.org/apps/raytracing/index.php?name=example_emissivesphere
@@ -347,7 +362,7 @@ fn get_normal_space2(normal: &Vector3<f32>) -> Matrix3<f32> {
 /// <br/>
 /// Here it does nothing but set the intensity/color to 0 (black) and set the hit flag to false. 
 fn miss_shader(ray: &mut Ray, _uniforms: &RaytracingUniforms) {
-    ray.intensity = 0.0;
+    ray.spectrum = Spectrum::new_equal_size_empty_spectrum(&ray.spectrum);  //TODO make sky blue perhaps or give user choice
     ray.hit = false;
 }
 

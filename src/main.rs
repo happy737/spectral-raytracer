@@ -1,5 +1,7 @@
 mod shader;
 mod custom_image;
+mod spectrum;
+mod spectral_data;
 
 use std::fmt::{Display, Formatter};
 use std::sync::{mpsc, Arc, Mutex};
@@ -12,10 +14,12 @@ use log::{error, info, warn};
 use nalgebra::Vector3;
 use threadpool::ThreadPool;
 use crate::shader::{PixelPos, RaytracingUniforms};
+use crate::spectrum::Spectrum;
 
 const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
 const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
+const NBR_OF_SPECTRUM_SAMPLES: usize = 64;  //TODO replace by ui selectable value
 
 fn main() -> eframe::Result {
     //Set up logging for the project
@@ -39,6 +43,8 @@ fn main() -> eframe::Result {
         })
     )
 }
+
+//TODO implement serialization and deserialization of settings via the serde crate
 
 /// Struct that forms the main data of the app. The struct contains data such as the generated 
 /// images or the values input into the UI. 
@@ -291,18 +297,18 @@ impl App {
         });
         
         //light intensity
-        ui.horizontal_top(|ui| {
-            let mut intensity_string = light.intensity.to_string();
-            ui.label("Light Intensity: ");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut intensity_string));
-
-            if intensity_string.parse::<f32>().is_ok() {
-                let input = intensity_string.parse::<f32>().unwrap();
-                if input >= 0.0 {
-                    light.intensity = input;
-                }
-            }
-        });
+        // ui.horizontal_top(|ui| { //TODO reimplement with spectrum selector
+        //     let mut intensity_string = light.intensity.to_string();
+        //     ui.label("Light Intensity: ");
+        //     ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut intensity_string));
+        // 
+        //     if intensity_string.parse::<f32>().is_ok() {
+        //         let input = intensity_string.parse::<f32>().unwrap();
+        //         if input >= 0.0 {
+        //             light.intensity = input;
+        //         }
+        //     }
+        // });
     }
     
     /// Shortcut function to display the settings for a single Object in the scene. The settings 
@@ -524,7 +530,7 @@ impl App {
         
         let mut done_rows = 0;
         while done_rows < height { 
-            let (y, row) = channel_receiver.recv().expect("Channel unexpectedly closed! The render process was not yet done.");
+            let (y, row) = channel_receiver.recv().expect("During the rendering process, a thread has terminated prematurely!");
             let mut iter = row.into_iter();
             let mut x = 0;
             while let (Some(r), Some(g), Some(b)) = 
@@ -573,6 +579,13 @@ impl App {
     
     fn dispatch_render(&mut self) {
         let thread_pool = ThreadPool::new(self.ui_values.nbr_of_threads);
+        
+        let example_spectrum = Spectrum::new_singular_reflectance_factor(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            NBR_OF_SPECTRUM_SAMPLES,
+            0.0,
+        );
 
         let uniforms = RaytracingUniforms{
             aabbs: Arc::new(self.ui_values.ui_objects.iter().map(|o| o.into()).collect()),
@@ -580,6 +593,7 @@ impl App {
             camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
             intended_frames_amount: self.ui_values.nbr_of_iterations,
+            example_spectrum,
         };
         
         //input validation
@@ -655,16 +669,40 @@ struct UIFields {
 }
 impl Default for UIFields {
     fn default() -> Self {
+        let sun10 = Spectrum::new_sunlight_spectrum(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            NBR_OF_SPECTRUM_SAMPLES,
+            20.0,
+        );
+        let sun1mil = Spectrum::new_sunlight_spectrum(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            NBR_OF_SPECTRUM_SAMPLES,
+            3_000_000.0,
+        );
         let ui_lights = vec![
-            UILight::new(0.0, 2.0, -1.0, 10.0),
-            UILight::new(0.0, 1_000.0, 0.0, 1_000_000.0),
+            UILight::new(0.0, 2.0, -1.0, sun10),
+            UILight::new(0.0, 1_000.0, 0.0, sun1mil),
         ];
         
+        let spectrum_grey = Spectrum::new_singular_reflectance_factor(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            NBR_OF_SPECTRUM_SAMPLES,
+            0.7,
+        );
+        let spectrum_white = Spectrum::new_singular_reflectance_factor(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            NBR_OF_SPECTRUM_SAMPLES,
+            1.0,
+        );
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, true, UIObjectType::PlainBox(0.25, 3.0, 3.0)),
-            UIObject::new(0.0, 0.0, 1.0, false, UIObjectType::Sphere(1.0)),
-            UIObject::new(1.0, 0.0, 1.0, false, UIObjectType::Sphere(1.0)),
-            UIObject::new(0.0, -1.0, 0.0, false, UIObjectType::PlainBox(50.0, 0.1, 50.0)),
+            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white, UIObjectType::PlainBox(0.25, 3.0, 3.0)),
+            UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
+            UIObject::new(1.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
+            UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey, UIObjectType::PlainBox(50.0, 0.1, 50.0)),
         ];
         
         Self {
@@ -690,16 +728,16 @@ struct UILight {
     pos_x: f32,
     pos_y: f32,
     pos_z: f32,
-    intensity: f32,
+    spectrum: Spectrum,
 }
 
 impl UILight {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, intensity: f32) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, spectrum: Spectrum) -> Self {
         Self {
             pos_x,
             pos_y,
             pos_z,
-            intensity,
+            spectrum,
         }
     }
 }
@@ -745,16 +783,18 @@ struct UIObject {
     pos_y: f32,
     pos_z: f32,
     metallicness: bool, 
+    spectrum: Spectrum,
     ui_object_type: UIObjectType,
 }
 
 impl UIObject {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, ui_object_type: UIObjectType) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, spectrum: Spectrum, ui_object_type: UIObjectType) -> Self {
         Self {
             pos_x,
             pos_y,
             pos_z,
             metallicness, 
+            spectrum,
             ui_object_type,
         }
     }
@@ -777,6 +817,10 @@ impl Default for UIObject {
             pos_y: 0.0, 
             pos_z: 0.0,
             metallicness: false,
+            spectrum: Spectrum::new_singular_reflectance_factor(
+                spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND, 
+                spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND, 
+                32, 0.7),
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
         }
     }
@@ -834,6 +878,10 @@ fn determine_optimal_thread_count() -> usize {
     }
 }
 
+//TODO undo redo stack for actions such as creating new elements or deleting old ones
+//TODO the entire UI could use an overhaul
+//TODO maybe give UIObjects a string field to be able to name them? (ie. object such as "wall" or "floor")
+//TODO maybe start a parallel thread which calls a frame update every second when rendering 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
         //Top Menu bar (File, Edit, ...)
@@ -844,7 +892,7 @@ impl eframe::App for App {
                                       egui::Button::new("Save Image"))
                         .clicked() {
                         
-                        let dialog = rfd::FileDialog::new()
+                        let dialog = rfd::FileDialog::new() //TODO make it save as certain datatypes only, currently "image" without datatype is valid
                             .set_file_name("image.png")
                             .save_file();
                         if let Some(path) = dialog {
@@ -912,9 +960,10 @@ impl eframe::App for App {
                             ui.horizontal_top(|ui| {
                                 ui.label("Light Sources:");
                                 ui.add_space(100.0);
-                                if ui.button("Add New Light Source").clicked() {
-                                    let light = UILight::new(0.0, 0.0, 0.0, 1.0);
-                                    self.ui_values.ui_lights.push(light);
+                                if ui.button("Add New Light Source").clicked() {    //TODO reimplement
+                                    todo!()
+                                    // let light = UILight::new(0.0, 0.0, 0.0, 1.0);
+                                    // self.ui_values.ui_lights.push(light);
                                 }
                             });
                         });
