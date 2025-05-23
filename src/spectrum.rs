@@ -188,7 +188,7 @@ impl Spectrum {
             
                 let fin = xyz_values.into_iter().fold(Vector3::new(0.0, 0.0, 0.0), |acc, x| acc + x);
                 let mut rgb: Vector3<f32> = XYZ_TO_RGB_MATRIX * fin;
-                gamma_correction(&mut rgb);
+                //gamma_correction(&mut rgb);
                 rgb.in2()
             }
         }
@@ -330,23 +330,6 @@ fn black_body_radiation(wavelength_nm: f64, temperature_k: f64) -> f64 {
     let big_denominator = f64::exp(hc / ltk) - 1.0;
 
     (hc22 / l5) * (1.0 / big_denominator)  * 1e-9   //*1e-9 = to /nanometer
-}
-
-/// Applies sRGB conform gamma correction to an RGB triplet. linear sRGB -> correct sRGB 
-fn gamma_correction(rgb: &mut Vector3<f32>) {
-    rgb.x = gamma_correction_single_value(rgb.x);
-    rgb.y = gamma_correction_single_value(rgb.y);
-    rgb.z = gamma_correction_single_value(rgb.z);
-}
-
-/// Calculates the linear -> sRGB gamma correction for a single float. Can be applied to the three 
-/// rgb values to gamma correct the triplet. 
-fn gamma_correction_single_value(value: f32) -> f32 {
-    if value < 0.0031308 {
-        value * 12.92
-    } else {
-        1.055 * value.powf(1.0 / 2.4) - 0.055
-    }
 }
 
 /// Computes the color in the XYZ colorspace of a given light wavelength. The wavelength unit must 
