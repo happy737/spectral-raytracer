@@ -1,4 +1,4 @@
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::PI;
 use std::sync::Arc;
 use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
 use crate::{UICamera, UILight, UIObject, UIObjectType};
@@ -479,18 +479,19 @@ fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Con
 
 // from http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
 // Hacker's Delight, Henry S. Warren, 2001
+//adapted to be used in rust
 fn radical_inverse(mut bits: u32) -> f32 {
-    bits = (bits << 16) | (bits >> 16);
+    bits = bits.rotate_right(16);
     bits = ((bits & 0x55555555) << 1) | ((bits & 0xAAAAAAAA) >> 1);
     bits = ((bits & 0x33333333) << 2) | ((bits & 0xCCCCCCCC) >> 2);
     bits = ((bits & 0x0F0F0F0F) << 4) | ((bits & 0xF0F0F0F0) >> 4);
     bits = ((bits & 0x00FF00FF) << 8) | ((bits & 0xFF00FF00) >> 8);
-    (bits as f32) * 2.3283064365386963e-10  // / 0x100000000
+    (bits as f32) * 2.328_306_4e-10  // / 0x100000000
 }
 
-fn hammersley(n: u32, N: u32) -> (f32, f32) {
+fn hammersley(n: u32, capital_n: u32) -> (f32, f32) {
     (
-        (n as f32 + 0.5) / N as f32,
+        (n as f32 + 0.5) / capital_n as f32,
         radical_inverse(n + 1),
     )
 }
@@ -523,39 +524,6 @@ fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {    //TO
         y as f32 * reciprocal,
         z as f32 * reciprocal,
     )
-}
-
-fn random_bounce_from_normal(normal: &Vector3<f32>, random_x: f32, random_y: f32) -> Vector3<f32> {
-    //determining random angles
-    let azimuthal_angle = random_x * TAU;   //phi
-    let polar_angle = random_y.sqrt().asin();   //theta
-    
-    //generate a random direction in its local space
-    let (local_x, local_y, local_z) = (
-        polar_angle.sin() * azimuthal_angle.cos(),
-        polar_angle.sin() * azimuthal_angle.sin(),
-        polar_angle.cos(),
-    );
-    let local_vec = Vector3::new(local_x, local_y, local_z);
-    
-    //align the local direction with the normal
-    get_normal_space(normal) * local_vec
-}
-
-/// Returns a 3x3 Matrix which, when multiplied by, transforms a Vector3 into the space of the 
-/// normal. A vector which simply points upwards will, after multiplication, point in the direction
-/// of the normal //TODO check if this is necessarily true
-fn get_normal_space(normal: &Vector3<f32>) -> Matrix3<f32> {
-    let vec_basis = vector![1.0, 0.0, 0.0];
-    let dd = vec_basis.dot(normal);
-    let mut vec_tangent = vector![0.0, 0.0, 1.0];
-
-    if 1.0 - dd.abs() > F32_DELTA {
-        vec_tangent = vec_basis.cross(normal).normalize();
-    }
-    let bi_tangent = normal.cross(&vec_tangent);
-
-    Matrix3::from_columns(&[vec_tangent, *normal, bi_tangent])
 }
 
 ///TODO reflects vector but what direction does incident have to be?

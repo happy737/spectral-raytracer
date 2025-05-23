@@ -1,3 +1,10 @@
+/// # The accuracy of the values is currently under debate. The visible light resulting from the spectrum does not equal white, as of the standard illuminant D65!
+/// Returns the Spectral Radiance of a given wavelength from the sun inside the earths' atmosphere.
+/// The values are linearly interpolated from the table [SUNLIGHT_SPECTRUM]. If the values are 
+/// outside the tables range, they are returned as zero, even though the spectral radiance of 
+/// wavelengths past 2.4µm is actually > 0.
+/// 
+#[allow(dead_code)]
 pub fn get_sunlight_intensity(wavelength: f32) -> f32 {
     if !(1.0..=2399.0).contains(&wavelength) {
         return 0.0;

@@ -673,13 +673,13 @@ impl Default for UIFields {
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             NBR_OF_SPECTRUM_SAMPLES,
-            20.0,
+            0.001,
         );
         let sun1mil = Spectrum::new_sunlight_spectrum(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             NBR_OF_SPECTRUM_SAMPLES,
-            3_000_000.0,
+            100.0,
         );
         let ui_lights = vec![
             UILight::new(0.0, 2.0, -1.0, sun10),
@@ -882,6 +882,7 @@ fn determine_optimal_thread_count() -> usize {
 //TODO the entire UI could use an overhaul
 //TODO maybe give UIObjects a string field to be able to name them? (ie. object such as "wall" or "floor")
 //TODO maybe start a parallel thread which calls a frame update every second when rendering 
+//TODO disable start rendering button when already rendering
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
         //Top Menu bar (File, Edit, ...)
