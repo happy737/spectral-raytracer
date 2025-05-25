@@ -1,4 +1,5 @@
 use std::ops::{AddAssign, Div, Mul, MulAssign};
+use log::info;
 use nalgebra::{Matrix3, Vector3};
 use wide::f32x8;
 
@@ -55,24 +56,7 @@ impl Spectrum {
     /// Creates a new Spectrum from a given list of intensities. Essentially allows custom 
     /// distributions to be submitted. 
     pub fn new_from_list(intensities: &[f32], lowest_wavelength: f32, highest_wavelength: f32) -> Self {
-        let len = intensities.len();
-        let capacity = len / 8 + ( if len % 8 == 0 { 0 } else { 1 } );
-        let mut vec: Vec<f32x8> = Vec::with_capacity(capacity);
-        let mut iter = intensities.iter().peekable();
-        while iter.peek().is_some() {
-            let simd = f32x8::from([
-                *iter.next().unwrap(),
-                *iter.next().unwrap_or(&0.0),
-                *iter.next().unwrap_or(&0.0),
-                *iter.next().unwrap_or(&0.0),
-                
-                *iter.next().unwrap_or(&0.0),
-                *iter.next().unwrap_or(&0.0),
-                *iter.next().unwrap_or(&0.0),
-                *iter.next().unwrap_or(&0.0),
-            ]);
-            vec.push(simd);
-        }
+        let (len, vec) = Self::spectral_radiance_list_to_simd_list(intensities);
         
         Spectrum {
             nbr_of_samples: len,
@@ -136,6 +120,30 @@ impl Spectrum {
 
         Self::new_from_list(&wavelengths, lowest_wavelength, highest_wavelength)
     }
+
+    /// Takes a list of spectral radiance's and copies them into a Vector containing [f32x8]s which 
+    /// are filled with the first lists values. Additionally, the amount of actual values is 
+    /// reported as well (the last f32x8 is padded with zeroes if necessary). 
+    fn spectral_radiance_list_to_simd_list(intensities: &[f32]) -> (usize, Vec<f32x8>) {
+        let len = intensities.len();
+        let capacity = len / 8 + (if len % 8 == 0 { 0 } else { 1 });
+        let mut vec: Vec<f32x8> = Vec::with_capacity(capacity);
+        let mut iter = intensities.iter().peekable();
+        while iter.peek().is_some() {
+            let simd = f32x8::from([
+                *iter.next().unwrap(),
+                *iter.next().unwrap_or(&0.0),
+                *iter.next().unwrap_or(&0.0),
+                *iter.next().unwrap_or(&0.0),
+                *iter.next().unwrap_or(&0.0),
+                *iter.next().unwrap_or(&0.0),
+                *iter.next().unwrap_or(&0.0),
+                *iter.next().unwrap_or(&0.0),
+            ]);
+            vec.push(simd);
+        }
+        (len, vec)
+    }
     
     /// Returns the sample at the given index. Will return [None](None) if the index is out of 
     /// bounds. Can by design not give a reference, therefore a copied value is returned instead. 
@@ -153,6 +161,31 @@ impl Spectrum {
         }
     }
     
+    /// Returns the spectral radiance at the given wavelength. If no sample exists for the precise 
+    /// value, the spectral radiance is linearly interpolated from the two nearest samples. If the 
+    /// wavelength is outside the spectrum range, 0 is returned. 
+    fn get_spectral_radiance_by_wavelength(&self, wavelength: f32) -> f32 {
+        let (lower_bound, upper_bound) = self.get_range();
+        
+        if !(lower_bound..=upper_bound).contains(&wavelength) {
+            return 0.0;
+        }
+        
+        let index_norm = (wavelength - lower_bound) / (upper_bound - lower_bound);
+        let index_frac = index_norm * (self.nbr_of_samples - 1) as f32;
+        if index_frac.fract() == 0.0 {
+            return self.get_sample(index_frac as usize).unwrap()
+        }
+        
+        let index_lower = index_frac.floor() as usize;
+        let index_upper = index_frac.ceil() as usize;
+        let frac = index_frac.fract();
+        let frac_inv = 1.0 - frac;
+        
+        self.get_sample(index_lower).unwrap() * frac + 
+            self.get_sample(index_upper).unwrap() * frac_inv
+    }
+    
     /// Modifies the inner intensities to each be at least 0.0 via [fast_max](f32x8::fast_max). 
     /// Make sure none of the intensities are NaN. 
     pub fn max0(&mut self) {
@@ -162,7 +195,6 @@ impl Spectrum {
         }
     }
 
-    //TODO this function probably is inefficient, measure runtimes and if appropriate rewrite it 
     /// This function is heavily subject to change! <br>
     /// Takes the spectrum and converts it into RGB values. <br>
     /// <br>
@@ -187,11 +219,57 @@ impl Spectrum {
                 }
             
                 let fin = xyz_values.into_iter().fold(Vector3::new(0.0, 0.0, 0.0), |acc, x| acc + x);
-                let mut rgb: Vector3<f32> = XYZ_TO_RGB_MATRIX * fin;
+                let rgb: Vector3<f32> = XYZ_TO_RGB_MATRIX * fin;
                 //gamma_correction(&mut rgb);
                 rgb.in2()
             }
         }
+    }
+    
+    /// Getter for the lower and upper end of the spectrum in order. 
+    pub fn get_range(&self) -> (f32, f32) {
+        match self.spectrum_type {
+            SpectrumType::EquidistantSamples(min, max) => {
+                (min, max)
+            }
+        }
+    } 
+    
+    /// Getter for the number of samples with which the spectrum is sampled.
+    pub fn get_nbr_of_samples(&self) -> usize {
+        self.nbr_of_samples
+    }
+    
+    /// Takes the given bounds as the new lower and upper bound, adjusting the samples accordingly. 
+    /// //TODO if sampling out of old bounds, nearest neighbor ?
+    pub fn rebound(&mut self, lower_bound: f32, upper_bound: f32) {
+        todo!()
+    }
+    
+    /// Modifies the existing Spectrum to be sampled with new_sample_amount. Does nothing if the 
+    /// new amount is the same as the old one. 
+    pub fn resample(&mut self, new_sample_amount: usize) {
+        assert!(new_sample_amount > 1);
+        
+        if new_sample_amount == self.nbr_of_samples {
+            return;
+        }
+        
+        let (lower_bound, upper_bound) = self.get_range();
+        let step = (upper_bound - lower_bound) / (new_sample_amount - 1) as f32;
+        
+        let mut samples = Vec::with_capacity(new_sample_amount);
+        
+        let mut current = lower_bound;
+        while current <= upper_bound {
+            samples.push(self.get_spectral_radiance_by_wavelength(current));
+            current += step;
+        }
+        
+        let (_, new_simd_vec) = Self::spectral_radiance_list_to_simd_list(&samples);
+        
+        self.nbr_of_samples = new_sample_amount;
+        self.intensities = new_simd_vec;
     }
 }
 
@@ -500,56 +578,6 @@ mod test {
                 (white.z - 100.0).abs() <= 0.01
         );
 
-        let only_ones = Spectrum::new_singular_reflectance_factor(
-            VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
-            VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            64,
-            1.0
-        );
-        println!("Only ones: {:?}", only_ones.to_rgb_early());
-        
-        let temp_5800_k = Spectrum::new_temperature_spectrum(
-            VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
-            VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            256,
-            6500.0,
-            1.0,
-        );
-        let rgb = temp_5800_k.to_rgb_early();
-        let max = rgb.0.max(rgb.1.max(rgb.2));
-        let (r, g, b) = (rgb.0 / max, rgb.1 / max, rgb.2 / max);
-        println!("temp_5800_k: {:?}", temp_5800_k.to_rgb_early());
-        println!("temp_5800_k normalized: R {r},  G {g},  B {b}");
-        
-        let mut i = 6000.0;
-        while i <= 7000.0 {
-            let spectrum = Spectrum::new_temperature_spectrum(
-                VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
-                VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-                1024,
-                i,
-                1.0,
-            );
-            let rgb = spectrum.to_rgb_early();
-            let max = rgb.0.max(rgb.1.max(rgb.2));
-            let (r, g, b) = (rgb.0 / max, rgb.1 / max, rgb.2 / max);
-            println!("Temp {i}K:  R {r},  G {g},  B {b}");
-            
-            i += 10.0;
-        }
-
-        let temp_6504_k = Spectrum::new_temperature_spectrum(
-            VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
-            VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            1024,
-            6504.0,
-            1.0,
-        );
-        let rgb = temp_6504_k.to_rgb_early();
-        let norm_to_x = (255.0, rgb.1 / rgb.0 * 255.0, rgb.2 / rgb.0 * 255.0);
-        println!("temp_6504_k: {:?}", temp_6504_k.to_rgb_early());
-        println!("temp_6504_k: {:?}", norm_to_x);
-
         //assert the sun produces white light
         let sun = Spectrum::new_sunlight_spectrum(
             VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
@@ -558,9 +586,9 @@ mod test {
             1.0,
         );
         let (r, g, b) = sun.to_rgb_early();
-        println!("Sunlight: {:?}", (r, g, b));
         assert!((r - g).abs() < 0.01, "Red ({r}) and green ({g}) too different to be greyscale!");
         assert!((g - b).abs() < 0.01, "Green ({g}) and blue ({b}) too different to be greyscale!");
+        assert!((r - b).abs() < 0.01, "Red ({r}) and blue ({b}) too different to be greyscale!");
         
         //TODO more useful tests as soon as the current one passes :,(  
     }

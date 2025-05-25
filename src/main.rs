@@ -22,19 +22,29 @@ const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
 const NBR_OF_SPECTRUM_SAMPLES: usize = 64;  //TODO replace by ui selectable value
 
 fn main() -> eframe::Result {
+    
+    //////////////////////////////////////// TO ORIENT: ////////////////////////////////////////////
+    // This is the entry point of the app, here logger and window settings are set.
+    // After this, the eframe logic is started, calling main::App::update periodically, this is 
+    // where the UI is defined. The UI contains buttons starting every other activity the app does.
+    // The main data structure on which the entire app operates is main::App. 
+    
     //Set up logging for the project
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
 
+    //Set up the window which will open
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([600.0, 400.0])
+            //.with_inner_size([1280.0, 720.0])
+            .with_maximized(true)
             .with_icon(IconData::default()),
         ..Default::default()
     };
 
+    //Start the actual app business
     eframe::run_native(
-        "Physical Ray-Tracer with eframe support",
+        "Spectral Ray-Tracer with eframe GUI",
         options,
         Box::new(|cc| {
             //image support
@@ -449,6 +459,99 @@ impl App {
             }
         }
     }
+    
+    fn display_spectrum_settings(&mut self, ui: &mut Ui, index: usize) {
+        let ui_spectrum = &mut self.ui_values.spectra[index];
+        
+        //name and delete button
+        ui.horizontal_top(|ui| {
+            //TODO enable name changing
+            let name = if ui_spectrum.name.is_empty() {
+                format!("Spectrum {}", index)
+            } else {
+                ui_spectrum.name.clone()
+            };
+            
+            ui.label(name);
+            
+            ui.add_space(80.0);
+
+            let delete_button = egui::widgets::Button::new("Delete this Spectrum").fill(egui::Color32::LIGHT_RED);
+            if ui.add(delete_button).clicked() {
+                //TODO enable deleting spectra
+                warn!("User wants to delete Spectrum {index}, but deletion of spectra is not yet supported!");
+            }
+        });
+        
+        let spectrum = &mut ui_spectrum.spectrum;
+        
+        //range
+        ui.horizontal_top(|ui| {
+            let (old_lower_bound, old_upper_bound) = spectrum.get_range();
+            let mut lower_bound = old_lower_bound.to_string();
+            let mut upper_bound = old_upper_bound.to_string();
+            
+            ui.label("Spectrum range: from:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut lower_bound));
+            ui.label("nm to:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut upper_bound));
+            ui.label("nm");
+            
+            if lower_bound.parse::<f32>().is_ok() {
+                let new_lower_bound = lower_bound.parse::<f32>().unwrap();
+                
+                if new_lower_bound != old_lower_bound && new_lower_bound < old_upper_bound {
+                    spectrum.rebound(new_lower_bound, old_upper_bound);
+                }
+            }
+            
+            if upper_bound.parse::<f32>().is_ok() {
+                let new_upper_bound = upper_bound.parse::<f32>().unwrap();
+                
+                if new_upper_bound != old_upper_bound && old_lower_bound < new_upper_bound {
+                    spectrum.rebound(old_lower_bound, new_upper_bound);
+                }
+            }
+        });
+        
+        //nbr of samples
+        ui.horizontal_top(|ui| {
+            let mut samples = spectrum.get_nbr_of_samples().to_string();
+            
+            ui.label("Number of samples:").on_hover_text("The number of samples used to \
+                sample the spectrum. Multiples of 8 are most cost-efficient.");
+            ui.text_edit_singleline(&mut samples);
+            
+            if samples.parse::<usize>().is_ok() {
+                let samples = samples.parse::<usize>().unwrap();
+                if samples > 1 {
+                    spectrum.resample(samples);
+                }
+            }
+            
+            let samples = spectrum.get_nbr_of_samples();
+            if ui.button("-").clicked() {
+                if samples % 8 == 0 {
+                    if samples == 8 {
+                        spectrum.resample(2);   //at least two samples have to be present
+                    } else {
+                        spectrum.resample(samples - 8); //subtract 8
+                    }
+                } else {
+                    spectrum.resample((samples / 8 * 8).max(2)); //drop down to nearest multiple of 8, at least 2
+                }
+            }
+            if ui.button("+").clicked() {
+                if samples % 8 == 0 {
+                    spectrum.resample(samples + 8); //add 8
+                } else {
+                    spectrum.resample((samples / 8 + 1) * 8);   //go up to nearest multiple of 8
+                }
+            }
+        });
+        
+        //TODO Spectrum settings maybe in second half of screen?
+    }
 
     /// The displayed time how long an image has been rendered is updated in this method, if the 
     /// app is currently rendering. 
@@ -666,6 +769,7 @@ struct UIFields {
     ui_lights: Vec<UILight>, 
     ui_objects: Vec<UIObject>,
     progress_bar_progress: f32,
+    spectra: Vec<UISpectrum>,
 }
 impl Default for UIFields {
     fn default() -> Self {
@@ -699,11 +803,17 @@ impl Default for UIFields {
             1.0,
         );
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white, UIObjectType::PlainBox(0.25, 3.0, 3.0)),
+            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 3.0)),
             UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
             UIObject::new(1.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
-            UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey, UIObjectType::PlainBox(50.0, 0.1, 50.0)),
+            UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0)),
         ];
+
+        let spectra = vec![
+            UISpectrum::from(spectrum_white),
+            UISpectrum::from(spectrum_grey),
+        ];
+        
         
         Self {
             width: 600,
@@ -717,6 +827,23 @@ impl Default for UIFields {
             ui_lights,
             ui_objects,
             progress_bar_progress: 0.0,
+            spectra,
+        }
+    }
+}
+
+/// A container for the [Spectrum] datatype. Holds additional information such as a label for 
+/// convenience of the user. 
+struct UISpectrum {
+    name: String,
+    spectrum: Spectrum,
+}
+
+impl From<Spectrum> for UISpectrum {
+    fn from(spectrum: Spectrum) -> Self {
+        Self {
+            name: String::new(),
+            spectrum,
         }
     }
 }
@@ -845,6 +972,7 @@ impl UIObjectType {
 enum UiTab {
     Settings,   //pre render settings such as width, height or number of frames
     Objects,    //3D models and lights defined in the scene
+    SpectraAndMaterials,    //reflectance and light spectra as well as object materials defined here
     Display,    //the screen ultimately displaying the result 
 }
 
@@ -906,10 +1034,10 @@ impl eframe::App for App {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
-                    if ui.button("Generate new blank Image").clicked() {
-                        self.generate_image_actual(ctx);
-                        self.generate_image_float();
-                    }
+                    // if ui.button("Generate new blank Image").clicked() {
+                    //     self.generate_image_actual(ctx);
+                    //     self.generate_image_float();
+                    // }
                     if ui.button("Start Rendering").clicked() {
                         self.dispatch_render();
                     }
@@ -929,6 +1057,9 @@ impl eframe::App for App {
                     }
                     if ui.button("Objects").clicked() {
                         self.ui_values.tab = UiTab::Objects;
+                    }
+                    if ui.button("Spectra and Materials").clicked() {
+                        self.ui_values.tab = UiTab::SpectraAndMaterials;
                     }
                     if ui.button("Display").clicked() {
                         self.ui_values.tab = UiTab::Display;
@@ -993,6 +1124,18 @@ impl eframe::App for App {
                         }
                     });
                 }
+                UiTab::SpectraAndMaterials => {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.label("Spectra:");
+                    });
+                    for index in 0..self.ui_values.spectra.len() {
+                        egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                            self.display_spectrum_settings(ui, index);
+                        });
+                    }
+                    ui.add_space(10.0);
+                    //TODO material settings
+                }
                 UiTab::Display => {
                     ui.horizontal_top(|ui| {
                         self.refresh_rendering_time();
@@ -1010,8 +1153,9 @@ impl eframe::App for App {
                                 );
                             });
                         } else if ui.button("Start generating image").clicked() {
-                            self.generate_image_actual(ctx);
-                            self.generate_image_float();
+                            // self.generate_image_actual(ctx);
+                            // self.generate_image_float();
+                            self.dispatch_render();
                         }
                     });
                 }
