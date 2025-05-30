@@ -2,6 +2,7 @@ mod shader;
 mod custom_image;
 mod spectrum;
 mod spectral_data;
+mod text_ressources;
 
 use std::fmt::{Display, Formatter};
 use std::sync::{mpsc, Arc, Mutex};
@@ -15,6 +16,7 @@ use nalgebra::Vector3;
 use threadpool::ThreadPool;
 use crate::shader::{PixelPos, RaytracingUniforms};
 use crate::spectrum::Spectrum;
+use crate::text_ressources::*;
 
 const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
@@ -84,7 +86,7 @@ impl App {
     fn display_width_text_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| { 
             ui.horizontal_top(|ui| {
-                ui.label("Width:");
+                ui.label("Width:").on_hover_text(IMAGE_WIDTH_TOOLTIP);
                 let mut width_string = self.ui_values.width.to_string();
                 ui.text_edit_singleline(&mut width_string);
                 if width_string.parse::<u32>().is_ok() {
@@ -105,7 +107,7 @@ impl App {
     fn display_height_text_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal_top(|ui| {
-                ui.label("Height:");
+                ui.label("Height:").on_hover_text(IMAGE_HEIGHT_TOOLTIP);
                 let mut height_string = self.ui_values.height.to_string();
                 ui.text_edit_singleline(&mut height_string);
                 if height_string.parse::<u32>().is_ok() {
@@ -127,7 +129,7 @@ impl App {
     fn display_nbr_of_iterations_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal_top(|ui| {
-                ui.label("Number of frames:");
+                ui.label("Number of frames:").on_hover_text(NUMBER_OF_ITERATIONS_TOOLTIP);
                 let mut nbr_of_iterations_string = self.ui_values.nbr_of_iterations.to_string();
                 ui.text_edit_singleline(&mut nbr_of_iterations_string);
                 if nbr_of_iterations_string.parse::<u32>().is_ok() {
@@ -153,7 +155,7 @@ impl App {
     fn display_nbr_of_threads_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal_top(|ui| {
-                ui.label("Number of parallel threads:");
+                ui.label("Number of parallel threads:").on_hover_text(NUMBER_OF_PARALLEL_THREADS_TOOLTIP);
                 ui.add(egui::Slider::new(&mut self.ui_values.nbr_of_threads, 1..=NBR_OF_THREADS_MAX));
                 if ui.button(" - ").clicked() {
                     self.ui_values.nbr_of_threads -= 1;
@@ -182,7 +184,7 @@ impl App {
             let mut pos_x_string = self.ui_values.ui_camera.pos_x.to_string();
             let mut pos_y_string = self.ui_values.ui_camera.pos_y.to_string();
             let mut pos_z_string = self.ui_values.ui_camera.pos_z.to_string();
-            ui.label("Camera Position: (x:");
+            ui.label("Camera Position: (x:").on_hover_text(CAMERA_POSITION_TOOLTIP);
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
             ui.label("y:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
@@ -207,7 +209,7 @@ impl App {
             let mut dir_y_string = self.ui_values.ui_camera.dir_y.to_string();
             let mut dir_z_string = self.ui_values.ui_camera.dir_z.to_string();
 
-            ui.label("Camera Direction: (x:");
+            ui.label("Camera Direction: (x:").on_hover_text(CAMERA_DIRECTION_TOOLTIP);
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_x_string));
             ui.label("y:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_y_string));
@@ -232,7 +234,7 @@ impl App {
             let mut up_y_string = self.ui_values.ui_camera.up_y.to_string();
             let mut up_z_string = self.ui_values.ui_camera.up_z.to_string();
 
-            ui.label("Camera Up: (x:");
+            ui.label("Camera Up: (x:").on_hover_text(CAMERA_UP_TOOLTIP);
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_x_string));
             ui.label("y:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_y_string));
@@ -253,7 +255,7 @@ impl App {
         
         //camera FOV
         ui.horizontal_top(|ui| {
-            ui.label("Camera vertical FOV in degrees:");
+            ui.label("Camera vertical FOV in degrees:").on_hover_text(CAMERA_FOV_TOOLTIP);
             let mut fov_string = self.ui_values.ui_camera.fov_deg_y.to_string();
 
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut fov_string));
@@ -287,7 +289,7 @@ impl App {
             let mut pos_x_string = light.pos_x.to_string();
             let mut pos_y_string = light.pos_y.to_string();
             let mut pos_z_string = light.pos_z.to_string();
-            ui.label("Light Position: (x:");
+            ui.label("Light Position: (x:").on_hover_text(LIGHT_SOURCE_TOOLTIP);
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
             ui.label("y:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
@@ -356,7 +358,7 @@ impl App {
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut selected, Type::PlainBox, "Plain Box");
                     ui.selectable_value(&mut selected, Type::Sphere, "Sphere");
-                });
+                }).response.on_hover_text(OBJECT_TYPE_TOOLTIP);
             let same = selected == match object.ui_object_type {
                 UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
                 UIObjectType::Sphere(_) => Type::Sphere,
@@ -381,7 +383,7 @@ impl App {
             let mut pos_x_string = object.pos_x.to_string();
             let mut pos_y_string = object.pos_y.to_string();
             let mut pos_z_string = object.pos_z.to_string();
-            ui.label("Object Position: (x:");
+            ui.label("Object Position: (x:").on_hover_text(OBJECT_POSITION_TOOLTIP);
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
             ui.label("y:");
             ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
@@ -402,7 +404,7 @@ impl App {
         
         //metallicness
         ui.horizontal_top(|ui| {
-            ui.label("Metallic?");
+            ui.label("Metallic?").on_hover_text(OBJECT_METALLICNESS_TOOLTIP);
             ui.checkbox(&mut object.metallicness, "");
         });
         
@@ -414,7 +416,7 @@ impl App {
                     let mut dim_x_string = x_length.to_string();
                     let mut dim_y_string = y_length.to_string();
                     let mut dim_z_string = z_length.to_string();
-                    ui.label("Object Dimensions: (x:");
+                    ui.label("Object Dimensions: (x:").on_hover_text(OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP);
                     ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_x_string));
                     ui.label("y:");
                     ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_y_string));
@@ -446,7 +448,7 @@ impl App {
                 //radius
                 ui.horizontal_top(|ui| {
                     let mut radius_string = radius.to_string();
-                    ui.label("Radius: ");
+                    ui.label("Radius: ").on_hover_text(OBJECT_SPHERE_RADIUS_TOOLTIP);
                     ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut radius_string));
                     
                     if radius_string.parse::<f32>().is_ok() {
@@ -1126,15 +1128,16 @@ impl eframe::App for App {
                 }
                 UiTab::SpectraAndMaterials => {
                     egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.label("ATTENTION! THIS PAGE IS NOT YET FUNCTIONAL!");
                         ui.label("Spectra:");
+                        for index in 0..self.ui_values.spectra.len() {
+                            egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                self.display_spectrum_settings(ui, index);
+                            });
+                        }
+                        ui.add_space(10.0);
+                        //TODO material settings
                     });
-                    for index in 0..self.ui_values.spectra.len() {
-                        egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
-                            self.display_spectrum_settings(ui, index);
-                        });
-                    }
-                    ui.add_space(10.0);
-                    //TODO material settings
                 }
                 UiTab::Display => {
                     ui.horizontal_top(|ui| {

@@ -1,0 +1,32 @@
+// settings 
+pub const IMAGE_WIDTH_TOOLTIP: &str = "The width of the image in pixels.";
+pub const IMAGE_HEIGHT_TOOLTIP: &str = "The height of the image in pixels.";
+pub const NUMBER_OF_PARALLEL_THREADS_TOOLTIP: &str  = "The number of parallel threads computing the \
+    image at any given time. The default value fully utilizes the CPU. If the computer is to be \
+    used otherwise during the duration of the rendering process, it is recommended to reduce \
+    the number by one or two.";
+pub const NUMBER_OF_ITERATIONS_TOOLTIP: &str  = "The number of frames generated to form the final \
+    image. Higher numbers take proportionally more time to render, but reduce the noise in the \
+    image, as well as make the lighting more correct. For very good results, use numbers greater \
+    than 1000.";
+
+
+// objects
+pub const CAMERA_POSITION_TOOLTIP: &str = "The position of the camera in the scene."; 
+pub const CAMERA_DIRECTION_TOOLTIP: &str = "The direction in which the camera looks. In the default \
+    scene, positive X is to the right, positive Y is upwards and positive Z looks into the screen.";
+pub const CAMERA_UP_TOOLTIP: &str = "The direction which the camera considers to be up. Changing \
+    this value allows for tilted cameras.";
+pub const CAMERA_FOV_TOOLTIP: &str = "The vertical FOV of the camera. The horizontal FOV is \
+    dependent on the vertical FOV and the aspect ratio."; 
+pub const LIGHT_SOURCE_TOOLTIP: &str = "The position of the light source in the scene.";
+pub const OBJECT_TYPE_TOOLTIP: &str = "The type of the object. The type determines its shape and \
+    collision detection speed. Having many complex types may drastically lower rendering speed."; 
+pub const OBJECT_POSITION_TOOLTIP: &str = "The position of the object in the scene. The position \
+    is defined as the point of the object where its local coordinates (0, 0) land.";
+pub const OBJECT_METALLICNESS_TOOLTIP: &str = "The metallicness of the material of the object. \
+    A metallic object is reflective like a mirror, whereas a non metallic object is reflective like \
+    a simple piece of plastic"; 
+pub const OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP: &str = "The width, height and depth of an \
+    axis-aligned box."; 
+pub const OBJECT_SPHERE_RADIUS_TOOLTIP: &str = "The radius of the sphere.";
