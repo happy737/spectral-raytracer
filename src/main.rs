@@ -12,7 +12,7 @@ use std::sync::atomic::AtomicU32;
 use std::thread;
 use std::time::{Duration, Instant};
 use eframe::egui;
-use eframe::egui::{menu, Color32, CornerRadius, IconData, TopBottomPanel, Ui};
+use eframe::egui::{menu, Color32, CornerRadius, IconData, Sense, TopBottomPanel, Ui, UiBuilder};
 use eframe::epaint::Vec2;
 use image::{DynamicImage, ImageBuffer};
 use log::{error, info, warn};
@@ -572,7 +572,7 @@ impl App {
     fn display_spectrum_right_side(&mut self, ui: &mut Ui, index: usize) {
         let mut spectrum = &mut self.ui_values.spectra[index].borrow_mut().spectrum;
         let (r, g, b) = spectrum.to_rgb_early();
-        
+
         //color squares
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
@@ -581,7 +581,7 @@ impl App {
                 let b_byte = (b.clamp(0.0, 1.0) * 255.0) as u8;
                 let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
                 let color = if luminance < 0.5 {Color32::WHITE} else {Color32::BLACK};
-                
+
                 egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
                     .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
                     .show(ui, |ui| {
@@ -592,13 +592,13 @@ impl App {
                 }).response.on_hover_text(OBSERVED_COLOR_TOOLTIP);
                 ui.label("Observed Color").on_hover_text(OBSERVED_COLOR_TOOLTIP);
             });
-            
+
             ui.vertical(|ui| {
                 let max = r.max(g.max(b));
                 let r_byte= (r / max * 255.0 + 0.5) as u8;
                 let g_byte= (g / max * 255.0 + 0.5) as u8;
                 let b_byte= (b / max * 255.0 + 0.5) as u8;
-                
+
                 egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
                     .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
                     .show(ui, |ui| {
@@ -611,7 +611,7 @@ impl App {
             });
         });
 
-        
+
         //samples
         egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
             for (wavelength, spectral_radiance) in spectrum.iter() {
@@ -845,6 +845,7 @@ struct UIFields {
     spectrum_lower_bound: f32,  //TODO change implementation
     spectrum_upper_bound: f32,
     spectrum_number_of_samples: usize,
+    selected_spectrum: Option<usize>,
 }
 impl Default for UIFields {
     fn default() -> Self {
@@ -887,7 +888,7 @@ impl Default for UIFields {
         let spectra = vec![
             Rc::from(RefCell::from(UISpectrum::from(sun10))),
             Rc::from(RefCell::from(UISpectrum::from(sun1mil))),
-            
+
             Rc::from(RefCell::from(UISpectrum::from(spectrum_white))),
             Rc::from(RefCell::from(UISpectrum::from(spectrum_grey))),
         ];
@@ -909,6 +910,7 @@ impl Default for UIFields {
             spectrum_lower_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum_upper_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             spectrum_number_of_samples: NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
+            selected_spectrum: None,
         }
     }
 }
@@ -1241,9 +1243,21 @@ impl eframe::App for App {
 
                                 ui.label("Spectra:");
                                 for index in 0..self.ui_values.spectra.len() {
-                                    egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
-                                        self.display_spectrum_settings(ui, index);
-                                    });
+                                    let mut color = Color32::LIGHT_GRAY;
+                                    if let Some(selected_index) = self.ui_values.selected_spectrum {
+                                        if selected_index == index {
+                                            color = Color32::LIGHT_BLUE;
+                                        }
+                                    }
+
+                                    if ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+                                        egui::Frame::NONE.fill(color).inner_margin(5.0).show(ui, |ui| {
+                                            self.display_spectrum_settings(ui, index);
+                                        });
+                                    }).response.clicked()  {
+                                        info!("CLICK!");
+                                        self.ui_values.selected_spectrum = Some(index);
+                                    };
                                 }
                                 ui.add_space(10.0);
                                 //TODO material settings
@@ -1255,8 +1269,14 @@ impl eframe::App for App {
 
                         //right side
                         ui.vertical(|ui| {
-                            ui.label("Here could be a spectrum!");
-                            self.display_spectrum_right_side(ui, 0);
+                            match self.ui_values.selected_spectrum {
+                                Some(index) => {
+                                    self.display_spectrum_right_side(ui, index);
+                                }
+                                None => {
+                                    ui.label("Select a spectrum to view its details...");
+                                }
+                            }
                         });
                     });
                 }
