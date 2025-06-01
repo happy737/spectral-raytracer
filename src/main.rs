@@ -4,12 +4,16 @@ mod spectrum;
 mod spectral_data;
 mod text_ressources;
 
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 use std::sync::{mpsc, Arc, Mutex};
+use std::sync::atomic::AtomicU32;
 use std::thread;
 use std::time::{Duration, Instant};
 use eframe::egui;
-use eframe::egui::{menu, IconData, TopBottomPanel, Ui};
+use eframe::egui::{menu, Color32, CornerRadius, IconData, TopBottomPanel, Ui};
+use eframe::epaint::Vec2;
 use image::{DynamicImage, ImageBuffer};
 use log::{error, info, warn};
 use nalgebra::Vector3;
@@ -21,7 +25,10 @@ use crate::text_ressources::*;
 const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
 const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
-const NBR_OF_SPECTRUM_SAMPLES: usize = 64;  //TODO replace by ui selectable value
+const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 64;  //TODO replace by ui selectable value
+
+static COUNTER: AtomicU32 = AtomicU32::new(1);
+fn get_id() -> u32 { COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed) }
 
 fn main() -> eframe::Result {
     
@@ -461,9 +468,80 @@ impl App {
             }
         }
     }
-    
+
+    fn display_general_spectrum_settings(&mut self, ui: &mut Ui) {
+        //nbr of samples
+        ui.horizontal_top(|ui| {
+            let nbr_of_samples = &mut self.ui_values.spectrum_number_of_samples;
+            let mut nbr_of_samples_string = nbr_of_samples.to_string();
+            let mut final_nbr_of_samples = *nbr_of_samples;
+
+            ui.label("Number of samples in the spectra:").on_hover_text(SPECTRUM_NUMBER_OF_SAMPLES_TOOLTIP);
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut nbr_of_samples_string));
+
+            if nbr_of_samples_string.parse::<usize>().is_ok() {
+                let new_nbr_of_samples = nbr_of_samples_string.parse::<usize>().unwrap();
+                if new_nbr_of_samples > 1 {
+                    final_nbr_of_samples = new_nbr_of_samples;
+                }
+            }
+
+            if ui.button("-").clicked() {
+                if *nbr_of_samples % 8 == 0 {
+                    if *nbr_of_samples == 8 {
+                        final_nbr_of_samples = 2;    //at least two samples have to be present
+                    } else {
+                        final_nbr_of_samples -= 8;   //subtract 8
+                    }
+                } else {
+                    final_nbr_of_samples = (*nbr_of_samples / 8 * 8).max(2)  //drop down to nearest multiple of 8, at least 2
+                }
+            }
+
+            if ui.button("+").clicked() {
+                if *nbr_of_samples % 8 == 0 {
+                    final_nbr_of_samples += 8;   //add 8
+                } else {
+                    final_nbr_of_samples = (*nbr_of_samples / 8 + 1) * 8;    //go up to nearest multiple of 8
+                }
+            }
+
+            if final_nbr_of_samples != *nbr_of_samples {
+                self.update_all_spectrum_sample_sizes(final_nbr_of_samples)
+            }
+        });
+
+        //range
+        ui.horizontal_top(|ui| {    //TODO implement non direct change
+            let lower_bound = &mut self.ui_values.spectrum_lower_bound;
+            let upper_bound = &mut self.ui_values.spectrum_upper_bound;
+            let mut lower_bound_string = lower_bound.to_string();
+            let mut upper_bound_string = upper_bound.to_string();
+
+            ui.label("Spectrum range from:").on_hover_text(SPECTRUM_RANGE_TOOLTIP);
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut lower_bound_string));
+            ui.label("nm to:");
+            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut upper_bound_string));
+            ui.label("nm");
+
+            if lower_bound_string.parse::<f32>().is_ok() {
+                let new_lower_bound = lower_bound_string.parse::<f32>().unwrap();
+                if 0.0 < new_lower_bound && new_lower_bound < *upper_bound {
+                    *lower_bound = new_lower_bound;
+                }
+            }
+            if upper_bound_string.parse::<f32>().is_ok() {
+                let new_upper_bound = upper_bound_string.parse::<f32>().unwrap();
+                if *lower_bound < new_upper_bound {
+                    *upper_bound = upper_bound_string.parse::<f32>().unwrap();
+                }
+            }
+        });
+    }
+
     fn display_spectrum_settings(&mut self, ui: &mut Ui, index: usize) {
         let ui_spectrum = &mut self.ui_values.spectra[index];
+        let mut ui_spectrum = ui_spectrum.borrow_mut();
         
         //name and delete button
         ui.horizontal_top(|ui| {
@@ -487,72 +565,60 @@ impl App {
         
         let spectrum = &mut ui_spectrum.spectrum;
         
-        //range
-        ui.horizontal_top(|ui| {
-            let (old_lower_bound, old_upper_bound) = spectrum.get_range();
-            let mut lower_bound = old_lower_bound.to_string();
-            let mut upper_bound = old_upper_bound.to_string();
-            
-            ui.label("Spectrum range: from:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut lower_bound));
-            ui.label("nm to:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut upper_bound));
-            ui.label("nm");
-            
-            if lower_bound.parse::<f32>().is_ok() {
-                let new_lower_bound = lower_bound.parse::<f32>().unwrap();
-                
-                if new_lower_bound != old_lower_bound && new_lower_bound < old_upper_bound {
-                    spectrum.rebound(new_lower_bound, old_upper_bound);
-                }
-            }
-            
-            if upper_bound.parse::<f32>().is_ok() {
-                let new_upper_bound = upper_bound.parse::<f32>().unwrap();
-                
-                if new_upper_bound != old_upper_bound && old_lower_bound < new_upper_bound {
-                    spectrum.rebound(old_lower_bound, new_upper_bound);
-                }
-            }
-        });
-        
-        //nbr of samples
-        ui.horizontal_top(|ui| {
-            let mut samples = spectrum.get_nbr_of_samples().to_string();
-            
-            ui.label("Number of samples:").on_hover_text("The number of samples used to \
-                sample the spectrum. Multiples of 8 are most cost-efficient.");
-            ui.text_edit_singleline(&mut samples);
-            
-            if samples.parse::<usize>().is_ok() {
-                let samples = samples.parse::<usize>().unwrap();
-                if samples > 1 {
-                    spectrum.resample(samples);
-                }
-            }
-            
-            let samples = spectrum.get_nbr_of_samples();
-            if ui.button("-").clicked() {
-                if samples % 8 == 0 {
-                    if samples == 8 {
-                        spectrum.resample(2);   //at least two samples have to be present
-                    } else {
-                        spectrum.resample(samples - 8); //subtract 8
-                    }
-                } else {
-                    spectrum.resample((samples / 8 * 8).max(2)); //drop down to nearest multiple of 8, at least 2
-                }
-            }
-            if ui.button("+").clicked() {
-                if samples % 8 == 0 {
-                    spectrum.resample(samples + 8); //add 8
-                } else {
-                    spectrum.resample((samples / 8 + 1) * 8);   //go up to nearest multiple of 8
-                }
-            }
-        });
-        
         //TODO Spectrum settings maybe in second half of screen?
+        //TODO make Spectrum type which will only resolve at the end and custom type
+    }
+
+    fn display_spectrum_right_side(&mut self, ui: &mut Ui, index: usize) {
+        let mut spectrum = &mut self.ui_values.spectra[index].borrow_mut().spectrum;
+        let (r, g, b) = spectrum.to_rgb_early();
+        
+        //color squares
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                let r_byte = (r.clamp(0.0, 1.0) * 255.0) as u8;
+                let g_byte = (g.clamp(0.0, 1.0) * 255.0) as u8;
+                let b_byte = (b.clamp(0.0, 1.0) * 255.0) as u8;
+                let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                let color = if luminance < 0.5 {Color32::WHITE} else {Color32::BLACK};
+                
+                egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
+                    .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
+                    .show(ui, |ui| {
+                        ui.set_max_size(Vec2::new(200.0, 100.0));
+                        ui.centered_and_justified(|ui| {
+                            ui.colored_label(color, format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
+                        });
+                }).response.on_hover_text(OBSERVED_COLOR_TOOLTIP);
+                ui.label("Observed Color").on_hover_text(OBSERVED_COLOR_TOOLTIP);
+            });
+            
+            ui.vertical(|ui| {
+                let max = r.max(g.max(b));
+                let r_byte= (r / max * 255.0 + 0.5) as u8;
+                let g_byte= (g / max * 255.0 + 0.5) as u8;
+                let b_byte= (b / max * 255.0 + 0.5) as u8;
+                
+                egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
+                    .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
+                    .show(ui, |ui| {
+                        ui.set_max_size(Vec2::new(200.0, 100.0));
+                        ui.centered_and_justified(|ui| {
+                            ui.label(format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
+                        });
+                    }).response.on_hover_text(NORMALIZED_COLOR_TOOLTIP);
+                ui.label("Normalized Color").on_hover_text(NORMALIZED_COLOR_TOOLTIP);
+            });
+        });
+
+        
+        //samples
+        egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
+            for (wavelength, spectral_radiance) in spectrum.iter() {
+                ui.label(format!("{wavelength:.2}nm: {spectral_radiance:.3}W/sr/m^2/nm"));
+            }
+        });
+        //todo!()
     }
 
     /// The displayed time how long an image has been rendered is updated in this method, if the 
@@ -568,6 +634,10 @@ impl App {
         } else {
             self.rendering_since = None;
         }
+    }
+
+    fn update_all_spectrum_sample_sizes(&mut self, nbr_of_samples: usize) {
+        todo!()
     }
     
     /// Generates the image in which the render result will be stored as soon as the CustomImage is 
@@ -666,8 +736,8 @@ impl App {
             
             {   //take the custom image, convert it into a DynamicImage and send it to the main app
                 let mut action_list = action_list.lock().unwrap();
-                action_list.push(AppActions::FrameUpdateAction(image_float.clone().into()));
-                action_list.push(AppActions::RenderingProgressUpdateAction((
+                action_list.push(AppActions::FrameUpdate(image_float.clone().into()));
+                action_list.push(AppActions::RenderingProgressUpdate((
                     frame_number + 1) as f32 / nbr_of_iterations as f32));
             }
         }
@@ -678,7 +748,7 @@ impl App {
         }
         {   //giving the ui the final rendering time in case it cannot compute it on its own
             let mut action_list = action_list.lock().unwrap();
-            action_list.push(AppActions::TrueTimeUpdateAction(Instant::now() - begin_time));
+            action_list.push(AppActions::TrueTimeUpdate(Instant::now() - begin_time));
         }
     }
     
@@ -688,7 +758,7 @@ impl App {
         let example_spectrum = Spectrum::new_singular_reflectance_factor(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            NBR_OF_SPECTRUM_SAMPLES,
+            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             0.0,
         );
 
@@ -745,15 +815,15 @@ impl App {
 enum AppActions {
     /// The rendering thread has completed an image, which can now be written back to the main
     /// struct to be displayed for the user.
-    FrameUpdateAction(DynamicImage),
+    FrameUpdate(DynamicImage),
     
     /// The rendering thread has completed the rendering process and reports back how long it took 
     /// exactly so that the UI may report it even if the ui did not update in a while. 
-    TrueTimeUpdateAction(Duration),
+    TrueTimeUpdate(Duration),
     
     /// The rendering thread has completed a step in rendering the image and now reports the 
     /// current progress amount until it is finished, to be displayed in a progressbar. 
-    RenderingProgressUpdateAction(f32),
+    RenderingProgressUpdate(f32),
 }
 
 /// This struct simply holds all values that will be mutated via the UI. It serves to differentiate 
@@ -771,37 +841,40 @@ struct UIFields {
     ui_lights: Vec<UILight>, 
     ui_objects: Vec<UIObject>,
     progress_bar_progress: f32,
-    spectra: Vec<UISpectrum>,
+    spectra: Vec<Rc<RefCell<UISpectrum>>>,
+    spectrum_lower_bound: f32,  //TODO change implementation
+    spectrum_upper_bound: f32,
+    spectrum_number_of_samples: usize,
 }
 impl Default for UIFields {
     fn default() -> Self {
         let sun10 = Spectrum::new_sunlight_spectrum(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            NBR_OF_SPECTRUM_SAMPLES,
+            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             0.001,
         );
         let sun1mil = Spectrum::new_sunlight_spectrum(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            NBR_OF_SPECTRUM_SAMPLES,
+            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             100.0,
         );
         let ui_lights = vec![
-            UILight::new(0.0, 2.0, -1.0, sun10),
-            UILight::new(0.0, 1_000.0, 0.0, sun1mil),
+            UILight::new(0.0, 2.0, -1.0, sun10.clone()),
+            UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone()),
         ];
         
         let spectrum_grey = Spectrum::new_singular_reflectance_factor(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            NBR_OF_SPECTRUM_SAMPLES,
+            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             0.7,
         );
         let spectrum_white = Spectrum::new_singular_reflectance_factor(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            NBR_OF_SPECTRUM_SAMPLES,
+            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             1.0,
         );
         let ui_objects = vec![
@@ -812,8 +885,11 @@ impl Default for UIFields {
         ];
 
         let spectra = vec![
-            UISpectrum::from(spectrum_white),
-            UISpectrum::from(spectrum_grey),
+            Rc::from(RefCell::from(UISpectrum::from(sun10))),
+            Rc::from(RefCell::from(UISpectrum::from(sun1mil))),
+            
+            Rc::from(RefCell::from(UISpectrum::from(spectrum_white))),
+            Rc::from(RefCell::from(UISpectrum::from(spectrum_grey))),
         ];
         
         
@@ -830,6 +906,9 @@ impl Default for UIFields {
             ui_objects,
             progress_bar_progress: 0.0,
             spectra,
+            spectrum_lower_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum_upper_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            spectrum_number_of_samples: NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
         }
     }
 }
@@ -837,16 +916,33 @@ impl Default for UIFields {
 /// A container for the [Spectrum] datatype. Holds additional information such as a label for 
 /// convenience of the user. 
 struct UISpectrum {
+    id: u32,
     name: String,
+    spectrum_type: UISpectrumType,
     spectrum: Spectrum,
+}
+
+enum UISpectrumType {
+    Custom,
+    Solar(f32),     //parameter = factor
+    PlainReflective(f32),   //parameter = factor 0-1
+    Temperature(f32, f32),  //parameter 0 = temp in Kelvin, parameter 1 = factor
 }
 
 impl From<Spectrum> for UISpectrum {
     fn from(spectrum: Spectrum) -> Self {
         Self {
+            id: get_id(),
             name: String::new(),
+            spectrum_type: UISpectrumType::Custom,
             spectrum,
         }
+    }
+}
+
+impl PartialEq for UISpectrum {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
@@ -1127,16 +1223,41 @@ impl eframe::App for App {
                     });
                 }
                 UiTab::SpectraAndMaterials => {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
+                    //TODO remove
+                    ui.vertical_centered_justified(|ui| {
                         ui.label("ATTENTION! THIS PAGE IS NOT YET FUNCTIONAL!");
-                        ui.label("Spectra:");
-                        for index in 0..self.ui_values.spectra.len() {
-                            egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
-                                self.display_spectrum_settings(ui, index);
+                    });
+
+                    ui.horizontal_top(|ui| {
+                        //left
+                        ui.vertical(|ui| {
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+
+                                ui.label("General Spectrum Settings:");
+                                egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                    self.display_general_spectrum_settings(ui);
+                                });
+                                ui.add_space(10.0);
+
+                                ui.label("Spectra:");
+                                for index in 0..self.ui_values.spectra.len() {
+                                    egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                        self.display_spectrum_settings(ui, index);
+                                    });
+                                }
+                                ui.add_space(10.0);
+                                //TODO material settings
                             });
-                        }
-                        ui.add_space(10.0);
-                        //TODO material settings
+                        });
+
+                        //divider
+                        ui.separator();
+
+                        //right side
+                        ui.vertical(|ui| {
+                            ui.label("Here could be a spectrum!");
+                            self.display_spectrum_right_side(ui, 0);
+                        });
                     });
                 }
                 UiTab::Display => {
@@ -1190,14 +1311,14 @@ impl eframe::App for App {
         
         for action in separate_action_list {
             match action {
-                AppActions::FrameUpdateAction(image) => {
+                AppActions::FrameUpdate(image) => {
                     self.image_actual = Some(image);
                     self.renew_texture_handle(ctx);
                 }
-                AppActions::TrueTimeUpdateAction(duration) => {
+                AppActions::TrueTimeUpdate(duration) => {
                     self.ui_values.frame_gen_time = Some(duration);
                 }
-                AppActions::RenderingProgressUpdateAction(progress) => {
+                AppActions::RenderingProgressUpdate(progress) => {
                     self.ui_values.progress_bar_progress = progress;
                 }
             }

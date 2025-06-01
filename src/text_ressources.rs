@@ -30,3 +30,18 @@ pub const OBJECT_METALLICNESS_TOOLTIP: &str = "The metallicness of the material 
 pub const OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP: &str = "The width, height and depth of an \
     axis-aligned box."; 
 pub const OBJECT_SPHERE_RADIUS_TOOLTIP: &str = "The radius of the sphere.";
+
+
+//spectra and materials
+pub const SPECTRUM_NUMBER_OF_SAMPLES_TOOLTIP: &str = "The number of samples used to sample the \
+    Spectrum. Higher numbers mean clearer images and more accurate numbers but also higher \
+    computing times. Multiples of 8 are most cost-efficient.";
+pub const SPECTRUM_RANGE_TOOLTIP: &str = "The lower and upper bound of the spectrum. The default \
+    values are the range of visible light.";
+pub const OBSERVED_COLOR_TOOLTIP: &str = "The color of the spectrum when looking directly at it. \
+    Welding sparks and lightning flashes are not true white, but they are so bright that they \
+    subjectively appear white. If this light source is bright enough, any color can appear white \
+    here.";
+pub const NORMALIZED_COLOR_TOOLTIP: &str = "The color of the spectrum when it is sufficiently \
+    dimmed or brightened. This view shows what kind of color a light source could throw unto a \
+    distant object.";

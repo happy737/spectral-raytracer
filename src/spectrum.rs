@@ -1,5 +1,4 @@
 use std::ops::{AddAssign, Div, Mul, MulAssign};
-use log::info;
 use nalgebra::{Matrix3, Vector3};
 use wide::f32x8;
 
@@ -271,6 +270,19 @@ impl Spectrum {
         self.nbr_of_samples = new_sample_amount;
         self.intensities = new_simd_vec;
     }
+    
+    /// Generates an Iterator which will yield tuples of wavelengths and their respective spectral 
+    /// radiance's. 
+    pub fn iter(&self) -> SpectrumIterator {
+        let (lower, upper) = self.get_range();
+        let step = (upper - lower) / (self.nbr_of_samples - 1) as f32;
+        
+        SpectrumIterator {
+            spectrum: self,
+            index: 0,
+            step,
+        }
+    }
 }
 
 impl AddAssign<&Spectrum> for Spectrum {
@@ -342,6 +354,27 @@ impl Div<f32> for &Spectrum {
             *elem / rhs
         }).collect::<Vec<f32x8>>();
         Spectrum::new(vec, self.spectrum_type, self.nbr_of_samples)
+    }
+}
+
+pub struct SpectrumIterator<'a> {
+    spectrum: &'a Spectrum,
+    index: usize,
+    step: f32,
+}
+impl<'a> Iterator for SpectrumIterator<'a> {
+    type Item = (f32, f32);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.spectrum.get_sample(self.index) {
+            Some(spectral_radiance) => {
+                let wavelength = self.spectrum.get_range().0 + self.step * self.index as f32;
+                self.index += 1;
+                
+                Some((wavelength, spectral_radiance))
+            }
+            None => None
+        }
     }
 }
 
