@@ -45,3 +45,15 @@ pub const OBSERVED_COLOR_TOOLTIP: &str = "The color of the spectrum when looking
 pub const NORMALIZED_COLOR_TOOLTIP: &str = "The color of the spectrum when it is sufficiently \
     dimmed or brightened. This view shows what kind of color a light source could throw unto a \
     distant object.";
+pub const SPECTRUM_TYPE_TOOLTIP: &str = "The preliminary type of the spectrum. The type \
+    determines the initial shape of the spectrum. The type can be changed to custom, which \
+    allows for direct editing of the samples. \nBeware: In opposition to all other types, changing \
+    the number of samples of a custom spectrum can lead to unexpected results!";
+pub const SPECTRUM_EFFECT_TYPE_TOOLTIP: &str = "The way the spectrum is intended to behave. \
+    There are two primary ways:\n\
+    1. Emitting: The spectrum is a light source. Use this for light sources. The values can take \
+    any form, typically larger than 1 in many places.\n\
+    2. Reflecting: The spectrum is not emitted. Instead it describes the share of each wavelength \
+    that is reflected. Under white light, a reflecting spectrum with only 0.5 as its values will \
+    appear as a medium gray. Reflection values must be in range [0; 1].";
+pub const SPECTRUM_RADIANCE_TOOLTIP: &str = "TODO!";    //TODO describe effect 

@@ -505,7 +505,8 @@ impl App {
             }
 
             if final_nbr_of_samples != *nbr_of_samples {
-                self.update_all_spectrum_sample_sizes(final_nbr_of_samples)
+                self.ui_values.spectrum_number_of_samples = final_nbr_of_samples;
+                self.update_all_spectrum_sample_sizes(final_nbr_of_samples);
             }
         });
 
@@ -559,10 +560,68 @@ impl App {
                 self.ui_values.after_ui_action = Some(AfterUIActions::DeleteSpectrum(index));
             }
         });
+
+        //spectrum type
+        ui.horizontal_top(|ui| {
+            ui.label("Spectrum type:").on_hover_text(SPECTRUM_TYPE_TOOLTIP);
+            
+            let mut selected_type = ui_spectrum.spectrum_type;
+            egui::ComboBox::new(format!("spectrum{}", index), "")   //the format is the ID salt, ensuring that each dropdown is distinct
+                .selected_text(selected_type.to_string())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut selected_type, UISpectrumType::Custom, format!("{}", UISpectrumType::Custom));
+                    ui.selectable_value(&mut selected_type, UISpectrumType::Solar(1.0), format!("{}", UISpectrumType::Solar(1.0)));
+                    ui.selectable_value(&mut selected_type, UISpectrumType::PlainReflective(1.0), format!("{}", UISpectrumType::PlainReflective(1.0)));
+                    ui.selectable_value(&mut selected_type, UISpectrumType::Temperature(1000.0, 1.0), format!("{}", UISpectrumType::Temperature(1.0, 1.0)));
+                }).response.on_hover_text(SPECTRUM_TYPE_TOOLTIP);   //TODO replace by ::default
+            
+            if selected_type != ui_spectrum.spectrum_type {
+                ui_spectrum.spectrum_type = selected_type;
+                match selected_type {
+                    UISpectrumType::Custom => {}
+                    UISpectrumType::Solar(factor) => {
+                        let lower = self.ui_values.spectrum_lower_bound;
+                        let upper = self.ui_values.spectrum_upper_bound;
+                        let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
+                        ui_spectrum.spectrum = Spectrum::new_sunlight_spectrum(lower, upper, nbr_of_samples, factor);
+                    }
+                    UISpectrumType::PlainReflective(factor) => {
+                        let lower = self.ui_values.spectrum_lower_bound;
+                        let upper = self.ui_values.spectrum_upper_bound;
+                        let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
+                        ui_spectrum.spectrum = Spectrum::new_singular_reflectance_factor(lower, upper, nbr_of_samples, factor);
+                    }
+                    UISpectrumType::Temperature(temp, factor) => {
+                        let lower = self.ui_values.spectrum_lower_bound;
+                        let upper = self.ui_values.spectrum_upper_bound;
+                        let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
+                        ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lower, upper, nbr_of_samples, temp, factor); 
+                    }
+                }
+                self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
+            }
+        });
         
-        let spectrum = &mut ui_spectrum.spectrum;
+        //spectrum reflectance
+        ui.horizontal_top(|ui| {
+            ui.label("Behavior:").on_hover_text(SPECTRUM_EFFECT_TYPE_TOOLTIP);
+            
+            let mut selected_type = ui_spectrum.spectrum_effect_type;
+            egui::ComboBox::new(format!("spectrumeffect {}", index), "")
+                .selected_text(selected_type.to_string())
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut selected_type, SpectrumEffectType::Emissive, format!("{}", SpectrumEffectType::Emissive));
+                    ui.selectable_value(&mut selected_type, SpectrumEffectType::Reflective, format!("{}", SpectrumEffectType::Reflective));
+                }).response.on_hover_text(SPECTRUM_EFFECT_TYPE_TOOLTIP);
+            
+            if selected_type != ui_spectrum.spectrum_effect_type {
+                ui_spectrum.spectrum_effect_type = selected_type;
+                self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
+            }
+            //TODO
+        });
         
-        //TODO make Spectrum type which will only resolve at the end and custom type
+        //let spectrum = &mut ui_spectrum.spectrum;
     }
 
     fn display_spectrum_right_side(&mut self, ui: &mut Ui) {
@@ -622,13 +681,25 @@ impl App {
                     }
                     SpectrumEffectType::Reflective => {
                         //no color squares
-                        ui.label("Color Preview not available for reflective spectra.");
+                        ui.label("Color Preview not (yet) available for reflective spectra.");
                     }
                 }
-
-                let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
+                ui.add_space(5.0);
+                
+                //radiance
+                ui.horizontal_top(|ui| {
+                    ui.label(format!("Radiance of the spectrum: {}W/sr/m^2", 
+                                     spectrum.get_radiance()))
+                        .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
+                });
+                ui.add_space(5.0);
 
                 //samples
+                let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
+                let slider_max = match selected.spectrum_effect_type {
+                    SpectrumEffectType::Emissive => {selected.max * 2.0},
+                    SpectrumEffectType::Reflective => 1.0,
+                };
                 egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
                     for ((wavelength, _), spectral_radiance) in spectrum.iter().zip(selected.spectrum_values.iter_mut()) {
                         //TODO make multiple sliders adjustable
@@ -637,7 +708,7 @@ impl App {
                             ui.style_mut().spacing.slider_width = 300.0;
                             ui.add_enabled(
                                 editable,
-                                egui::Slider::new(spectral_radiance, 0.0..=(selected.max * 2.0))
+                                egui::Slider::new(spectral_radiance, 0.0..=slider_max)
                                     .fixed_decimals(3)
                                     .step_by(0.001)
                             );
@@ -651,6 +722,24 @@ impl App {
             }
         }
 
+    }
+
+    fn update_selected_spectrum(&mut self, index: usize) {
+        let ui_spectrum = self.ui_values.spectra[index].borrow();
+        let working_vec: Vec<f32> = ui_spectrum.spectrum.iter().map(|(_, value)| value).collect();
+        let max = working_vec.iter().fold(f32::NEG_INFINITY, |acc, elem| acc.max(*elem));
+        let (lower, upper) = ui_spectrum.spectrum.get_range();
+
+        let ui_selected_spectrum = UISelectedSpectrum {
+            selected_spectrum: index,
+            max,
+            spectrum_values: working_vec,
+            spectrum_effect_type: ui_spectrum.spectrum_effect_type,
+            lower_bound: lower,
+            upper_bound: upper,
+            ui_spectrum_type: ui_spectrum.spectrum_type,
+        };
+        self.ui_values.selected_spectrum = Some(ui_selected_spectrum);
     }
 
     /// The displayed time how long an image has been rendered is updated in this method, if the 
@@ -669,7 +758,27 @@ impl App {
     }
 
     fn update_all_spectrum_sample_sizes(&mut self, nbr_of_samples: usize) {
-        todo!()
+        for ui_spectrum_ref in &mut self.ui_values.spectra {
+            let mut ui_spectrum = ui_spectrum_ref.borrow_mut();
+            let lowest = self.ui_values.spectrum_lower_bound;
+            let highest = self.ui_values.spectrum_upper_bound;
+            
+            match ui_spectrum.spectrum_type {
+                UISpectrumType::Custom => {
+                    ui_spectrum.spectrum.resample(nbr_of_samples);
+                }
+                UISpectrumType::Solar(factor) => {
+                    ui_spectrum.spectrum = Spectrum::new_sunlight_spectrum(lowest, highest, nbr_of_samples, factor);
+                }
+                UISpectrumType::PlainReflective(factor) => {
+                    ui_spectrum.spectrum = Spectrum::new_singular_reflectance_factor(lowest, highest, nbr_of_samples, factor);
+                }
+                UISpectrumType::Temperature(temp, factor) => { 
+                    ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lowest, highest, nbr_of_samples, temp, factor);
+                }
+            }
+        }
+        self.ui_values.after_ui_action = Some(AfterUIActions::DeselectSelectedSpectrum);
     }
     
     /// A single frame render process. Takes the uniforms and mixes the image into the 
@@ -923,7 +1032,6 @@ struct UISelectedSpectrum {
     pub lower_bound: f32,
     pub upper_bound: f32,
     pub ui_spectrum_type: UISpectrumType,
-    pub name: String,
 }
 
 /// A container for the [Spectrum] datatype. Holds additional information such as a label for 
@@ -937,32 +1045,52 @@ struct UISpectrum {
     spectrum: Spectrum,
 }
 
-impl From<UISelectedSpectrum> for UISpectrum {
-    fn from(value: UISelectedSpectrum) -> Self {
-        let spectrum = Spectrum::new_from_list(&value.spectrum_values, value.lower_bound, value.upper_bound);
-
-        UISpectrum {
-            id: get_id(),
-            name: value.name,
-            spectrum_type: value.ui_spectrum_type,
-            spectrum_effect_type: value.spectrum_effect_type,
-            spectrum,
-        }
+impl UISpectrum {
+    /// Updates the UISpectrum. Overwrites the attached spectrum with the changes made by the user.
+    pub fn edit(&mut self, update: &UISelectedSpectrum) {
+        let spectrum = Spectrum::new_from_list(&update.spectrum_values, update.lower_bound, update.upper_bound);
+        self.spectrum = spectrum;
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum SpectrumEffectType {
     Emissive,
     Reflective,
 }
 
+impl Display for SpectrumEffectType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpectrumEffectType::Emissive => {
+                write!(f, "Emissive")
+            }
+            SpectrumEffectType::Reflective => {
+                write!(f, "Reflective")
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
+#[derive(PartialEq)]
 enum UISpectrumType {
     Custom,
     Solar(f32),     //parameter = factor
     PlainReflective(f32),   //parameter = factor 0-1
+    ///Parameter 0 = temp in Kelvin, parameter 1 = factor
     Temperature(f32, f32),  //parameter 0 = temp in Kelvin, parameter 1 = factor
+}
+
+impl Display for UISpectrumType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UISpectrumType::Custom => write!(f, "Custom"),
+            UISpectrumType::Solar(x) => write!(f, "Solar spectrum"),
+            UISpectrumType::PlainReflective(x) => write!(f, "All the same"),
+            UISpectrumType::Temperature(x, y) => write!(f, "Temperature"),
+        }
+    }
 }
 
 impl From<Spectrum> for UISpectrum {
@@ -1118,6 +1246,8 @@ enum AfterUIActions {
     DeleteObject(usize),
     SaveSelectedSpectrum(usize),
     DeleteSpectrum(usize),
+    UpdateSelectedSpectrum(usize),
+    DeselectSelectedSpectrum,
 }
 
 /// Takes 2 3-dimensional vectors and checks if they are linearly dependent (point in the same
@@ -1293,22 +1423,7 @@ impl eframe::App for App {
                                             self.display_spectrum_settings(ui, index);
                                         });
                                     }).response.clicked()  {
-                                        let ui_spectrum = self.ui_values.spectra[index].borrow();
-                                        let working_vec: Vec<f32> = ui_spectrum.spectrum.iter().map(|(_, value)| value).collect();
-                                        let max = working_vec.iter().fold(f32::NEG_INFINITY, |acc, elem| acc.max(*elem));
-                                        let (lower, upper) = ui_spectrum.spectrum.get_range();
-                                        let ui_selected_spectrum = UISelectedSpectrum {
-                                            selected_spectrum: index,
-                                            max,
-                                            spectrum_values: working_vec,
-                                            spectrum_effect_type: ui_spectrum.spectrum_effect_type,
-                                            lower_bound: lower,
-                                            upper_bound: upper,
-                                            ui_spectrum_type: ui_spectrum.spectrum_type,
-                                            name: ui_spectrum.name.clone(),
-                                        };
-                                        info!("Set new selected spectrum!");
-                                        self.ui_values.selected_spectrum = Some(ui_selected_spectrum);
+                                        self.update_selected_spectrum(index);
                                     };
                                 }
                                 ui.add_space(10.0);
@@ -1365,10 +1480,16 @@ impl eframe::App for App {
                 }
                 AfterUIActions::SaveSelectedSpectrum(index) => {
                     let selected = self.ui_values.selected_spectrum.take().unwrap();
-                    self.ui_values.spectra[index] = Rc::new(RefCell::new(selected.into()));
+                    self.ui_values.spectra[index].borrow_mut().edit(&selected);
                 }
                 AfterUIActions::DeleteSpectrum(index) => {
                     self.ui_values.spectra.remove(index);
+                }
+                AfterUIActions::UpdateSelectedSpectrum(index) => {
+                    self.update_selected_spectrum(index);
+                }
+                AfterUIActions::DeselectSelectedSpectrum => {
+                    self.ui_values.selected_spectrum = None;
                 }
             }
         }

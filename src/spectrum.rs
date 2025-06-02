@@ -283,6 +283,15 @@ impl Spectrum {
             step,
         }
     }
+    
+    /// Calculates the radiance of the spectrum. This is the integral over the spectral radiance's.
+    pub fn get_radiance(&self) -> f32 {
+        let iter = self.iter();
+        let step = iter.step;
+        iter.map(|(_, spectral_radiance)| spectral_radiance * step)
+            .fold(0f32, |acc, elem| acc + elem) 
+            / self.nbr_of_samples as f32
+    }
 }
 
 impl AddAssign<&Spectrum> for Spectrum {
