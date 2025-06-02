@@ -12,9 +12,9 @@ use std::sync::atomic::AtomicU32;
 use std::thread;
 use std::time::{Duration, Instant};
 use eframe::egui;
-use eframe::egui::{menu, Color32, CornerRadius, IconData, Sense, TopBottomPanel, Ui, UiBuilder};
+use eframe::egui::{menu, Color32, IconData, Sense, TopBottomPanel, Ui, UiBuilder};
 use eframe::epaint::Vec2;
-use image::{DynamicImage, ImageBuffer};
+use image::DynamicImage;
 use log::{error, info, warn};
 use nalgebra::Vector3;
 use threadpool::ThreadPool;
@@ -25,7 +25,7 @@ use crate::text_ressources::*;
 const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
 const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
-const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 64;  //TODO replace by ui selectable value
+const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 64;
 
 static COUNTER: AtomicU32 = AtomicU32::new(1);
 fn get_id() -> u32 { COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed) }
@@ -69,7 +69,6 @@ fn main() -> eframe::Result {
 /// images or the values input into the UI. 
 struct App {
     ui_values: UIFields,
-    image_float: Option<custom_image::CustomImage>,
     image_actual: Option<DynamicImage>,
     image_eframe_texture: Option<egui::TextureHandle>,
     actions: Arc<Mutex<Vec<AppActions>>>,
@@ -80,7 +79,6 @@ impl App {
     fn new() -> Self {
         Self {
             ui_values: UIFields::default(),
-            image_float: None,
             image_actual: None,
             image_eframe_texture: None,
             actions: Arc::new(Mutex::new(Vec::new())),
@@ -284,7 +282,7 @@ impl App {
             ui.label(name);
             ui.add_space(100.0);
             
-            let delete_button = egui::widgets::Button::new("Delete this light source").fill(egui::Color32::LIGHT_RED);
+            let delete_button = egui::widgets::Button::new("Delete this light source").fill(Color32::LIGHT_RED);
             if ui.add(delete_button).clicked() {
                 self.ui_values.after_ui_action = Some(AfterUIActions::DeleteLight(index));
                 info!("Light Source #{} has been scheduled for deletion.", index);
@@ -378,7 +376,7 @@ impl App {
             }
             ui.add_space(30.0);
 
-            let delete_button = egui::widgets::Button::new("Delete this object").fill(egui::Color32::LIGHT_RED);
+            let delete_button = egui::widgets::Button::new("Delete this object").fill(Color32::LIGHT_RED);
             if ui.add(delete_button).clicked() {
                 self.ui_values.after_ui_action = Some(AfterUIActions::DeleteObject(index));
                 info!("Object #{} has been scheduled for deletion.", index);
@@ -556,16 +554,14 @@ impl App {
             
             ui.add_space(80.0);
 
-            let delete_button = egui::widgets::Button::new("Delete this Spectrum").fill(egui::Color32::LIGHT_RED);
+            let delete_button = egui::widgets::Button::new("Delete this Spectrum").fill(Color32::LIGHT_RED);
             if ui.add(delete_button).clicked() {
-                //TODO enable deleting spectra
-                warn!("User wants to delete Spectrum {index}, but deletion of spectra is not yet supported!");
+                self.ui_values.after_ui_action = Some(AfterUIActions::DeleteSpectrum(index));
             }
         });
         
         let spectrum = &mut ui_spectrum.spectrum;
         
-        //TODO Spectrum settings maybe in second half of screen?
         //TODO make Spectrum type which will only resolve at the end and custom type
     }
 
@@ -574,6 +570,13 @@ impl App {
             Some(selected) => {
                 let spectrum = Spectrum::new_from_list(&selected.spectrum_values, selected.lower_bound, selected.upper_bound);
                 let (r, g, b) = spectrum.to_rgb_early();
+
+                ui.horizontal_top(|ui| {
+                    ui.colored_label(Color32::RED, "Any changes will not be applied unless saved. Selecting another spectrum will discard changes!");
+                    if ui.button("Save").clicked() {
+                        self.ui_values.after_ui_action = Some(AfterUIActions::SaveSelectedSpectrum(selected.selected_spectrum));
+                    }
+                });
 
                 match selected.spectrum_effect_type {
                     SpectrumEffectType::Emissive => {
@@ -618,11 +621,12 @@ impl App {
                         });
                     }
                     SpectrumEffectType::Reflective => {
+                        //no color squares
                         ui.label("Color Preview not available for reflective spectra.");
                     }
                 }
 
-                let editable = selected.is_custom;
+                let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
 
                 //samples
                 egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
@@ -632,11 +636,12 @@ impl App {
                             ui.label(format!("{wavelength:.2}nm:"));
                             ui.style_mut().spacing.slider_width = 300.0;
                             ui.add_enabled(
-                                editable, 
-                                egui::Slider::new(&mut *spectral_radiance, 0.0..=(selected.max * 2.0))
+                                editable,
+                                egui::Slider::new(spectral_radiance, 0.0..=(selected.max * 2.0))
                                     .fixed_decimals(3)
                                     .step_by(0.001)
                             );
+                            ui.label("W/sr/m^2/nm");
                         });
                     }
                 });
@@ -665,38 +670,6 @@ impl App {
 
     fn update_all_spectrum_sample_sizes(&mut self, nbr_of_samples: usize) {
         todo!()
-    }
-    
-    /// Generates the image in which the render result will be stored as soon as the CustomImage is 
-    /// no longer necessary. This image has to be generated beforehand. 
-    fn generate_image_actual(&mut self, ctx: &egui::Context) {
-        let width = self.ui_values.width;
-        let height = self.ui_values.height;
-        
-        let data = (0..(width * height * 3)).map(|_| 0u8).collect();
-        let img = DynamicImage::ImageRgb8(ImageBuffer::from_vec(width, height, data).unwrap());
-        
-        self.image_actual = Some(img.clone());
-        
-        let rgb_img = img.to_rgba8();
-        let size = [rgb_img.width() as usize, rgb_img.height() as usize];
-        let pixels = rgb_img.as_raw();
-        let color_image = 
-            egui::ColorImage::from_rgba_unmultiplied(size, pixels);
-        
-        self.image_eframe_texture = Some(
-            ctx.load_texture("dynamic_image", color_image, egui::TextureOptions::default())
-        );
-    }
-    
-    /// Generates a new blank [CustomImage](custom_image::CustomImage) 
-    /// and moves it to the main app. 
-    fn generate_image_float(&mut self) {
-        let width = self.ui_values.width;
-        let height = self.ui_values.height;
-        
-        let img = custom_image::CustomImage::new(width, height);
-        self.image_float = Some(img);
     }
     
     /// A single frame render process. Takes the uniforms and mixes the image into the 
@@ -869,7 +842,7 @@ struct UIFields {
     ui_objects: Vec<UIObject>,
     progress_bar_progress: f32,
     spectra: Vec<Rc<RefCell<UISpectrum>>>,
-    spectrum_lower_bound: f32,  //TODO change implementation
+    spectrum_lower_bound: f32,
     spectrum_upper_bound: f32,
     spectrum_number_of_samples: usize,
     selected_spectrum: Option<UISelectedSpectrum>,
@@ -949,7 +922,8 @@ struct UISelectedSpectrum {
     pub spectrum_effect_type: SpectrumEffectType,
     pub lower_bound: f32,
     pub upper_bound: f32,
-    pub is_custom: bool,
+    pub ui_spectrum_type: UISpectrumType,
+    pub name: String,
 }
 
 /// A container for the [Spectrum] datatype. Holds additional information such as a label for 
@@ -961,6 +935,20 @@ struct UISpectrum {
     spectrum_type: UISpectrumType,
     spectrum_effect_type: SpectrumEffectType,
     spectrum: Spectrum,
+}
+
+impl From<UISelectedSpectrum> for UISpectrum {
+    fn from(value: UISelectedSpectrum) -> Self {
+        let spectrum = Spectrum::new_from_list(&value.spectrum_values, value.lower_bound, value.upper_bound);
+
+        UISpectrum {
+            id: get_id(),
+            name: value.name,
+            spectrum_type: value.ui_spectrum_type,
+            spectrum_effect_type: value.spectrum_effect_type,
+            spectrum,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1128,6 +1116,8 @@ enum UiTab {
 enum AfterUIActions {
     DeleteLight(usize),
     DeleteObject(usize),
+    SaveSelectedSpectrum(usize),
+    DeleteSpectrum(usize),
 }
 
 /// Takes 2 3-dimensional vectors and checks if they are linearly dependent (point in the same
@@ -1229,7 +1219,7 @@ impl eframe::App for App {
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         //camera settings
                         ui.label("Camera:");
-                        egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                        egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                             self.display_camera_settings(ui);
                         });
                         ui.add_space(10.0);
@@ -1247,7 +1237,7 @@ impl eframe::App for App {
                             });
                         });
                         for index in 0..self.ui_values.ui_lights.len() {
-                            egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                            egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                                 self.display_light_source_settings(ui, index);
                             });
                         }
@@ -1265,7 +1255,7 @@ impl eframe::App for App {
                             });
                         });
                         for index in 0..self.ui_values.ui_objects.len() {
-                            egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                            egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                                 self.display_objects_settings(ui, index);   //TODO ui setting for reflectivity
                             });
                         }
@@ -1283,7 +1273,7 @@ impl eframe::App for App {
                             egui::ScrollArea::vertical().show(ui, |ui| {
 
                                 ui.label("General Spectrum Settings:");
-                                egui::Frame::NONE.fill(egui::Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
                                     self.display_general_spectrum_settings(ui);
                                 });
                                 ui.add_space(10.0);
@@ -1314,7 +1304,8 @@ impl eframe::App for App {
                                             spectrum_effect_type: ui_spectrum.spectrum_effect_type,
                                             lower_bound: lower,
                                             upper_bound: upper,
-                                            is_custom: matches!(ui_spectrum.spectrum_type, UISpectrumType::Custom),
+                                            ui_spectrum_type: ui_spectrum.spectrum_type,
+                                            name: ui_spectrum.name.clone(),
                                         };
                                         info!("Set new selected spectrum!");
                                         self.ui_values.selected_spectrum = Some(ui_selected_spectrum);
@@ -1335,6 +1326,7 @@ impl eframe::App for App {
                     });
                 }
                 UiTab::Display => {
+                    //user information about rendering time
                     ui.horizontal_top(|ui| {
                         self.refresh_rendering_time();
                         self.display_frame_generation_time(ui);
@@ -1343,7 +1335,8 @@ impl eframe::App for App {
                         });
                     });
 
-                    egui::Frame::NONE.fill(egui::Color32::GRAY).show(ui, |ui| {
+                    //image display frame
+                    egui::Frame::NONE.fill(Color32::GRAY).show(ui, |ui| {
                         if let Some(ref img) = self.image_eframe_texture {
                             egui::ScrollArea::both().show(ui, |ui| {
                                 ui.add(
@@ -1351,8 +1344,6 @@ impl eframe::App for App {
                                 );
                             });
                         } else if ui.button("Start generating image").clicked() {
-                            // self.generate_image_actual(ctx);
-                            // self.generate_image_float();
                             self.dispatch_render();
                         }
                     });
@@ -1371,6 +1362,13 @@ impl eframe::App for App {
                 }
                 AfterUIActions::DeleteObject(index) => {
                     self.ui_values.ui_objects.remove(index);
+                }
+                AfterUIActions::SaveSelectedSpectrum(index) => {
+                    let selected = self.ui_values.selected_spectrum.take().unwrap();
+                    self.ui_values.spectra[index] = Rc::new(RefCell::new(selected.into()));
+                }
+                AfterUIActions::DeleteSpectrum(index) => {
+                    self.ui_values.spectra.remove(index);
                 }
             }
         }
