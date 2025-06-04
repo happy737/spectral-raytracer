@@ -796,7 +796,7 @@ impl App {
                                 egui::Slider::new(spectral_radiance, 0.0..=slider_max)
                                     .fixed_decimals(3)
                                     .step_by(0.001)
-                            );
+                            ).on_disabled_hover_text(SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP);
                             ui.label(unit_label);
                         });
                     }
@@ -1118,7 +1118,7 @@ impl Default for UIFields {
         );
         let sun1mil = Rc::from(RefCell::from(sun1mil));
         let ui_lights = vec![
-            UILight::new(0.0, 2.0, -1.0, sun10.clone(), "Close light source".to_string()),
+            UILight::new(0.0, 2.0, -1.0, sun10.clone(), "Close light".to_string()),
             UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone(), "Far away sun".to_string()),
         ];
         
@@ -1385,6 +1385,36 @@ impl UIObject {
             ui_object_type,
         }
     }
+    
+    pub fn default(app: &App) -> Self {
+        let spectrum = match app.ui_values.spectra.first() {
+            Some(spec_ref) => {
+                spec_ref.clone()
+            }
+            None => {
+                let plain_spectrum = Spectrum::new_singular_reflectance_factor(
+                    app.ui_values.spectrum_lower_bound,
+                    app.ui_values.spectrum_upper_bound,
+                    app.ui_values.spectrum_number_of_samples,
+                    0.7);
+                Rc::new(RefCell::new(UISpectrum::new(
+                    "REPLACE ME".to_string(),
+                    UISpectrumType::PlainReflective(0.7),
+                    SpectrumEffectType::Reflective,
+                    plain_spectrum,
+                )))
+            }
+        };
+        
+        Self {
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: 0.0,
+            metallicness: false,
+            spectrum,
+            ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
+        }
+    }
 }
 
 impl Display for UIObject {
@@ -1394,29 +1424,6 @@ impl Display for UIObject {
             UIObjectType::Sphere(_) => "Sphere",
         };
         write!(f, "{}", s)
-    }
-}
-
-impl Default for UIObject {
-    fn default() -> Self {
-        let spectrum = Spectrum::new_singular_reflectance_factor(
-            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
-            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            32, 0.7);
-        let spectrum = UISpectrum::new(
-            "REPLACE ME".to_string(),
-            UISpectrumType::PlainReflective(0.7),
-            SpectrumEffectType::Reflective,
-            spectrum,
-        );
-        Self {
-            pos_x: 0.0, 
-            pos_y: 0.0, 
-            pos_z: 0.0,
-            metallicness: false,
-            spectrum: Rc::new(RefCell::new(spectrum)),
-            ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
-        }
     }
 }
 
@@ -1608,7 +1615,7 @@ impl eframe::App for App {
                                 ui.label("Objects:");
                                 ui.add_space(100.0);
                                 if ui.button("Add New Object").clicked() {
-                                    let object = UIObject::default();
+                                    let object = UIObject::default(self);
                                     self.ui_values.ui_objects.push(object);
                                 }
                             });
