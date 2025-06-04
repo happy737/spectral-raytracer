@@ -2,7 +2,7 @@ mod shader;
 mod custom_image;
 mod spectrum;
 mod spectral_data;
-mod text_ressources;
+mod text_resources;
 
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
@@ -12,20 +12,20 @@ use std::sync::atomic::AtomicU32;
 use std::thread;
 use std::time::{Duration, Instant};
 use eframe::egui;
-use eframe::egui::{menu, Color32, IconData, Sense, TopBottomPanel, Ui, UiBuilder};
+use eframe::egui::{menu, Color32, ComboBox, IconData, Sense, TextEdit, TopBottomPanel, Ui, UiBuilder};
 use eframe::epaint::Vec2;
 use image::DynamicImage;
-use log::{error, info, warn};
+use log::{error, warn};
 use nalgebra::Vector3;
 use threadpool::ThreadPool;
 use crate::shader::{PixelPos, RaytracingUniforms};
 use crate::spectrum::Spectrum;
-use crate::text_ressources::*;
+use crate::text_resources::*;
 
 const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
 const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
-const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 64;
+const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 32;
 
 static COUNTER: AtomicU32 = AtomicU32::new(1);
 fn get_id() -> u32 { COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed) }
@@ -103,6 +103,24 @@ impl App {
                     }
                 } else if width_string.is_empty() {
                     self.ui_values.width = 1;
+                }
+
+                //diverse quick settings buttons
+                if ui.button("HD").clicked() {
+                    self.ui_values.width = 1280;
+                    self.ui_values.height = 720;
+                }
+                if ui.button("FHD").clicked() {
+                    self.ui_values.width = 1920;
+                    self.ui_values.height = 1080;
+                }
+                if ui.button("QHD").clicked() {
+                    self.ui_values.width = 2560;
+                    self.ui_values.height = 1440;
+                }
+                if ui.button("UHD").clicked() {
+                    self.ui_values.width = 3840;
+                    self.ui_values.height = 2160;
                 }
             });
         });
@@ -190,11 +208,11 @@ impl App {
             let mut pos_y_string = self.ui_values.ui_camera.pos_y.to_string();
             let mut pos_z_string = self.ui_values.ui_camera.pos_z.to_string();
             ui.label("Camera Position: (x:").on_hover_text(CAMERA_POSITION_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_x_string));
             ui.label("y:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_y_string));
             ui.label("z:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_z_string));
             ui.label(")");
 
             if pos_x_string.parse::<f32>().is_ok() {
@@ -215,11 +233,11 @@ impl App {
             let mut dir_z_string = self.ui_values.ui_camera.dir_z.to_string();
 
             ui.label("Camera Direction: (x:").on_hover_text(CAMERA_DIRECTION_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_x_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dir_x_string));
             ui.label("y:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_y_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dir_y_string));
             ui.label("z:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dir_z_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dir_z_string));
             ui.label(")");
 
             if dir_x_string.parse::<f32>().is_ok() {
@@ -240,11 +258,11 @@ impl App {
             let mut up_z_string = self.ui_values.ui_camera.up_z.to_string();
 
             ui.label("Camera Up: (x:").on_hover_text(CAMERA_UP_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_x_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut up_x_string));
             ui.label("y:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_y_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut up_y_string));
             ui.label("z:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut up_z_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut up_z_string));
             ui.label(")");
 
             if up_x_string.parse::<f32>().is_ok() {
@@ -263,7 +281,7 @@ impl App {
             ui.label("Camera vertical FOV in degrees:").on_hover_text(CAMERA_FOV_TOOLTIP);
             let mut fov_string = self.ui_values.ui_camera.fov_deg_y.to_string();
 
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut fov_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut fov_string));
 
             if fov_string.parse::<f32>().is_ok() {
                 self.ui_values.ui_camera.fov_deg_y = fov_string.parse::<f32>().unwrap();
@@ -278,14 +296,14 @@ impl App {
         
         //name
         ui.horizontal_top(|ui| {
-            let name = format!("Light Source #{}", index);
+            let name = if light.name.is_empty() 
+                {&format!("Light Source #{}", index)} else {&light.name};
             ui.label(name);
             ui.add_space(100.0);
             
             let delete_button = egui::widgets::Button::new("Delete this light source").fill(Color32::LIGHT_RED);
             if ui.add(delete_button).clicked() {
                 self.ui_values.after_ui_action = Some(AfterUIActions::DeleteLight(index));
-                info!("Light Source #{} has been scheduled for deletion.", index);
             }
         });
         
@@ -295,11 +313,11 @@ impl App {
             let mut pos_y_string = light.pos_y.to_string();
             let mut pos_z_string = light.pos_z.to_string();
             ui.label("Light Position: (x:").on_hover_text(LIGHT_SOURCE_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_x_string));
             ui.label("y:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_y_string));
             ui.label("z:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_z_string));
             ui.label(")");
 
             if pos_x_string.parse::<f32>().is_ok() {
@@ -312,20 +330,22 @@ impl App {
                 light.pos_z = pos_z_string.parse::<f32>().unwrap();
             }
         });
-        
-        //light intensity
-        // ui.horizontal_top(|ui| { //TODO reimplement with spectrum selector
-        //     let mut intensity_string = light.intensity.to_string();
-        //     ui.label("Light Intensity: ");
-        //     ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut intensity_string));
-        // 
-        //     if intensity_string.parse::<f32>().is_ok() {
-        //         let input = intensity_string.parse::<f32>().unwrap();
-        //         if input >= 0.0 {
-        //             light.intensity = input;
-        //         }
-        //     }
-        // });
+
+        //light spectrum
+        ui.horizontal_top(|ui| {
+            ui.label("Spectrum:").on_hover_text(LIGHT_SPECTRUM_TOOLTIP);
+            let borrow = light.spectrum.borrow();
+            let selected_text = borrow.to_string();
+            drop(borrow);
+
+            ComboBox::new(format!("light source {index} spectrum"), "")
+                .selected_text(selected_text)
+                .show_ui(ui, |ui| {
+                    for spectrum in &self.ui_values.spectra {
+                        ui.selectable_value(&mut light.spectrum, spectrum.clone(), spectrum.borrow().to_string());
+                    }
+                }).response.on_hover_text(LIGHT_SPECTRUM_TOOLTIP);
+        });
     }
     
     /// Shortcut function to display the settings for a single Object in the scene. The settings 
@@ -358,7 +378,7 @@ impl App {
                 UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
                 UIObjectType::Sphere(_) => Type::Sphere,
             };
-            egui::ComboBox::new(index, "Type")
+            ComboBox::new(index, "Type")
                 .selected_text(format!("{}", selected))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut selected, Type::PlainBox, "Plain Box");
@@ -379,7 +399,6 @@ impl App {
             let delete_button = egui::widgets::Button::new("Delete this object").fill(Color32::LIGHT_RED);
             if ui.add(delete_button).clicked() {
                 self.ui_values.after_ui_action = Some(AfterUIActions::DeleteObject(index));
-                info!("Object #{} has been scheduled for deletion.", index);
             }
         });
         
@@ -389,11 +408,11 @@ impl App {
             let mut pos_y_string = object.pos_y.to_string();
             let mut pos_z_string = object.pos_z.to_string();
             ui.label("Object Position: (x:").on_hover_text(OBJECT_POSITION_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_x_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_x_string));
             ui.label("y:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_y_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_y_string));
             ui.label("z:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut pos_z_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut pos_z_string));
             ui.label(")");
 
             if pos_x_string.parse::<f32>().is_ok() {
@@ -422,11 +441,11 @@ impl App {
                     let mut dim_y_string = y_length.to_string();
                     let mut dim_z_string = z_length.to_string();
                     ui.label("Object Dimensions: (x:").on_hover_text(OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP);
-                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_x_string));
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dim_x_string));
                     ui.label("y:");
-                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_y_string));
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dim_y_string));
                     ui.label("z:");
-                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut dim_z_string));
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dim_z_string));
                     ui.label(")");
 
                     if dim_x_string.parse::<f32>().is_ok() {
@@ -454,7 +473,7 @@ impl App {
                 ui.horizontal_top(|ui| {
                     let mut radius_string = radius.to_string();
                     ui.label("Radius: ").on_hover_text(OBJECT_SPHERE_RADIUS_TOOLTIP);
-                    ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut radius_string));
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut radius_string));
                     
                     if radius_string.parse::<f32>().is_ok() {
                         let new_radius = radius_string.parse::<f32>().unwrap();
@@ -465,8 +484,25 @@ impl App {
                 });
             }
         }
+        
+        //reflecting spectrum
+        ui.horizontal_top(|ui| {
+            ui.label("Reflecting factor Spectrum:").on_hover_text(OBJECT_SPECTRUM_REFLECTING_TOOLTIP);
+            let borrow = object.spectrum.borrow();
+            let selected_text = borrow.to_string();
+            drop(borrow);
+            
+            ComboBox::new(format!("object reflecting {index} spectrum"), "") 
+                .selected_text(selected_text)
+                .show_ui(ui, |ui| {
+                    for spectrum in &self.ui_values.spectra {
+                        ui.selectable_value(&mut object.spectrum, spectrum.clone(), spectrum.borrow().to_string());
+                    }
+                }).response.on_hover_text(OBJECT_SPECTRUM_REFLECTING_TOOLTIP);
+        });
     }
 
+    /// Displays the settings which all spectra must have in common, such as the number of samples.
     fn display_general_spectrum_settings(&mut self, ui: &mut Ui) {
         //nbr of samples
         ui.horizontal_top(|ui| {
@@ -475,7 +511,7 @@ impl App {
             let mut final_nbr_of_samples = *nbr_of_samples;
 
             ui.label("Number of samples in the spectra:").on_hover_text(SPECTRUM_NUMBER_OF_SAMPLES_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut nbr_of_samples_string));
+            ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut nbr_of_samples_string));
 
             if nbr_of_samples_string.parse::<usize>().is_ok() {
                 let new_nbr_of_samples = nbr_of_samples_string.parse::<usize>().unwrap();
@@ -518,9 +554,15 @@ impl App {
             let mut upper_bound_string = upper_bound.to_string();
 
             ui.label("Spectrum range from:").on_hover_text(SPECTRUM_RANGE_TOOLTIP);
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut lower_bound_string));
+            //ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut lower_bound_string));  //uncomment to make wavelength bounds editable
+            ui.add_enabled(false,
+                           TextEdit::singleline(&mut lower_bound_string).desired_width(80.0))
+                .on_disabled_hover_text(SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP);
             ui.label("nm to:");
-            ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut upper_bound_string));
+            //ui.add_sized([80.0, 18.0], egui::TextEdit::singleline(&mut upper_bound_string));
+            ui.add_enabled(false,
+                           TextEdit::singleline(&mut upper_bound_string).desired_width(80.0))
+                .on_disabled_hover_text(SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP);
             ui.label("nm");
 
             if lower_bound_string.parse::<f32>().is_ok() {
@@ -538,6 +580,10 @@ impl App {
         });
     }
 
+    /// Displays the simple settings for a single spectrum. Simple settings are the spectrum type or
+    /// the brightness factor. More complicated settings such as individual sample values go to the
+    /// dedicated settings on the right in
+    /// [display_spectrum_right_side](App::display_spectrum_right_side).
     fn display_spectrum_settings(&mut self, ui: &mut Ui, index: usize) {
         let ui_spectrum = &mut self.ui_values.spectra[index];
         let mut ui_spectrum = ui_spectrum.borrow_mut();
@@ -566,7 +612,7 @@ impl App {
             ui.label("Spectrum type:").on_hover_text(SPECTRUM_TYPE_TOOLTIP);
             
             let mut selected_type = ui_spectrum.spectrum_type;
-            egui::ComboBox::new(format!("spectrum{}", index), "")   //the format is the ID salt, ensuring that each dropdown is distinct
+            ComboBox::new(format!("spectrum{}", index), "")   //the format is the ID salt, ensuring that each dropdown is distinct
                 .selected_text(selected_type.to_string())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut selected_type, UISpectrumType::Custom, format!("{}", UISpectrumType::Custom));
@@ -607,7 +653,7 @@ impl App {
             ui.label("Behavior:").on_hover_text(SPECTRUM_EFFECT_TYPE_TOOLTIP);
             
             let mut selected_type = ui_spectrum.spectrum_effect_type;
-            egui::ComboBox::new(format!("spectrumeffect {}", index), "")
+            ComboBox::new(format!("spectrum effect {}", index), "")
                 .selected_text(selected_type.to_string())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut selected_type, SpectrumEffectType::Emissive, format!("{}", SpectrumEffectType::Emissive));
@@ -632,7 +678,8 @@ impl App {
                     let mut temp_string = temp.to_string();
 
                     ui.label("Black body radiation temperature:");
-                    ui.text_edit_singleline(&mut temp_string);
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut temp_string));
+                    ui.label("K");  //TODO add support for different temperature scales
 
                     if temp_string.parse::<f32>().is_ok() {
                         let new_temp = temp_string.parse::<f32>().unwrap();
@@ -648,16 +695,16 @@ impl App {
             }
             UISpectrumType::Custom => {}
         }
-        
-        
+
+
         drop(ui_spectrum);  //I just pray that this is future-proof
         if changed {
             self.update_spectrum()
         }
     }
 
-
-
+    /// Displays the right side of spectrum settings. Here the user can preview the color of
+    /// the spectrum and each samples individual value.
     fn display_spectrum_right_side(&mut self, ui: &mut Ui) {
         match self.ui_values.selected_spectrum.as_mut() {
             Some(selected) => {
@@ -721,12 +768,14 @@ impl App {
                 ui.add_space(5.0);
                 
                 //radiance
-                ui.horizontal_top(|ui| {
-                    ui.label(format!("Radiance of the spectrum: {}W/sr/m^2", 
-                                     spectrum.get_radiance()))
-                        .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
-                });
-                ui.add_space(5.0);
+                if selected.spectrum_effect_type != SpectrumEffectType::Reflective {
+                    ui.horizontal_top(|ui| {
+                        ui.label(format!("Radiance of the spectrum: {}W/sr/m^2",
+                                         spectrum.get_radiance()))
+                            .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
+                    });
+                    ui.add_space(5.0);
+                }
 
                 //samples
                 let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
@@ -734,6 +783,8 @@ impl App {
                     SpectrumEffectType::Emissive => {selected.max * 2.0},
                     SpectrumEffectType::Reflective => 1.0,
                 };
+                let unit_label = if selected.spectrum_effect_type == SpectrumEffectType::Emissive 
+                    {"W/sr/m^2/nm"} else {""};
                 egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
                     for ((wavelength, _), spectral_radiance) in spectrum.iter().zip(selected.spectrum_values.iter_mut()) {
                         //TODO make multiple sliders adjustable
@@ -746,7 +797,7 @@ impl App {
                                     .fixed_decimals(3)
                                     .step_by(0.001)
                             );
-                            ui.label("W/sr/m^2/nm");
+                            ui.label(unit_label);
                         });
                     }
                 });
@@ -793,8 +844,8 @@ impl App {
         }
     }
 
-    /// Iterates over all ui spectra. All non-custom Spectra are simply generated again with the new 
-    /// sample size, for each custom spectrum [resample](Spectrum::resample) is called. 
+    /// Iterates over all ui spectra. All non-custom Spectra are simply generated again with the new
+    /// sample size, for each custom spectrum [resample](Spectrum::resample) is called.
     fn update_all_spectrum_sample_sizes(&mut self, nbr_of_samples: usize) {
         for ui_spectrum_ref in &mut self.ui_values.spectra {
             let mut ui_spectrum = ui_spectrum_ref.borrow_mut();
@@ -870,7 +921,10 @@ impl App {
             done_rows += 1;
         }
     }
-    
+
+    /// The overarching render process, best started in another thread. Calls
+    /// [apply_shader2](App::apply_shader2) for each frame and gives the result to the main thread
+    /// to be displayed to the user.
     fn render(mut image_float: custom_image::CustomImage, mut uniforms: RaytracingUniforms,
               thread_pool: ThreadPool, nbr_of_iterations: u32, rendering:  Arc<Mutex<bool>>,
               action_list: Arc<Mutex<Vec<AppActions>>>) 
@@ -904,14 +958,27 @@ impl App {
             action_list.push(AppActions::TrueTimeUpdate(Instant::now() - begin_time));
         }
     }
-    
+
+    /// The function which will dispatch the render process to another thread. Takes all relevant
+    /// UI-side values, extracts the information such as the pure spectra necessary for rendering
+    /// and passes these on to the next thread.
     fn dispatch_render(&mut self) {
+        self.update_all_spectrum_sample_sizes(self.ui_values.spectrum_number_of_samples);
+        //TODO more safety checks?
+        
+        if !self.check_render_legality() {
+            error!("The values passed to the renderer are in an illegal state! The renderer will \
+                crash! Aborting rendering. Turn to App::check_render_legality to start the \
+                debugging process.");
+            return;
+        }
+        
         let thread_pool = ThreadPool::new(self.ui_values.nbr_of_threads);
         
         let example_spectrum = Spectrum::new_singular_reflectance_factor(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
-            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
+            self.ui_values.spectrum_number_of_samples,
             0.0,
         );
 
@@ -941,7 +1008,9 @@ impl App {
             Self::render(image, uniforms, thread_pool, nbr_of_iterations, rendering, action_list);
         });
     }
-    
+
+    /// Takes the [DynamicImage] in [image_actual](App::image_actual) and generates an egui texture
+    /// handle from it. This is necessary to display the image to the user.
     fn renew_texture_handle(&mut self, ctx: &egui::Context) {
         if self.image_actual.is_none() {
             self.image_eframe_texture = None;
@@ -959,6 +1028,25 @@ impl App {
         self.image_eframe_texture = Some(
             ctx.load_texture("dynamic_image", color_image, egui::TextureOptions::default())
         );
+    }
+
+    /// Checks if all values about to be passed to the renderer are in order. This function should
+    /// return false if an error exists which will make the renderer crash. 
+    fn check_render_legality(&self) -> bool {
+        let lights_ok = self.ui_values.ui_lights.iter()
+            .map(|l| self.ui_values.spectra.contains(&l.spectrum))
+            .all(|b| b);
+        
+        let objects_ok = self.ui_values.ui_objects.iter()
+            .map(|o| self.ui_values.spectra.contains(&o.spectrum))
+            .all(|b| b);
+        
+        let ui_sample_nbr = self.ui_values.spectrum_number_of_samples;
+        let spectra_ok = self.ui_values.spectra.iter()
+            .map(|s| s.borrow().spectrum.get_nbr_of_samples() == ui_sample_nbr)
+            .all(|b| b);
+        
+        lights_ok && objects_ok && spectra_ok
     }
 }
 
@@ -1030,8 +1118,8 @@ impl Default for UIFields {
         );
         let sun1mil = Rc::from(RefCell::from(sun1mil));
         let ui_lights = vec![
-            UILight::new(0.0, 2.0, -1.0, sun10.clone()),
-            UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone()),
+            UILight::new(0.0, 2.0, -1.0, sun10.clone(), "Close light source".to_string()),
+            UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone(), "Far away sun".to_string()),
         ];
         
         let spectrum_grey = Spectrum::new_singular_reflectance_factor(
@@ -1138,6 +1226,28 @@ impl UISpectrum {
     }
 }
 
+impl Default for UISpectrum {
+    fn default() -> Self {
+        Self::new(
+            "REPLACE ME".to_string(),
+            UISpectrumType::PlainReflective(0.0),
+            SpectrumEffectType::Emissive,
+            Spectrum::new_singular_reflectance_factor(
+                1.0, 
+                2.0, 
+                NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
+                0.0,
+            )
+        )
+    }
+}
+
+impl Display for UISpectrum {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum SpectrumEffectType {
     Emissive,
@@ -1204,15 +1314,17 @@ struct UILight {
     pos_y: f32,
     pos_z: f32,
     spectrum: Rc<RefCell<UISpectrum>>,
+    name: String,
 }
 
 impl UILight {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, spectrum: Rc<RefCell<UISpectrum>>) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, spectrum: Rc<RefCell<UISpectrum>>, name: String) -> Self {
         Self {
             pos_x,
             pos_y,
             pos_z,
             spectrum,
+            name,
         }
     }
 }
@@ -1367,14 +1479,14 @@ fn determine_optimal_thread_count() -> usize {
 
 /// Generates a singular horizontal ui line, inserts the label "Brightness factor" and puts the
 /// supplied factor into a text edit field with the only check being: factor > 0.0.
-/// Returns true iff the value has been changed. 
+/// Returns true iff the value has been changed.
 fn display_factor(ui: &mut Ui, factor: &mut f32) -> bool {
     let mut changed = false;
     ui.horizontal_top(|ui| {
         let mut factor_string = factor.to_string();
 
         ui.label("Brightness factor:");
-        ui.text_edit_singleline(&mut factor_string);
+        ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut factor_string));
 
         if factor_string.parse::<f32>().is_ok() {
             let new_factor = factor_string.parse::<f32>().unwrap();
@@ -1473,10 +1585,13 @@ impl eframe::App for App {
                             ui.horizontal_top(|ui| {
                                 ui.label("Light Sources:");
                                 ui.add_space(100.0);
-                                if ui.button("Add New Light Source").clicked() {    //TODO reimplement
-                                    todo!()
-                                    // let light = UILight::new(0.0, 0.0, 0.0, 1.0);
-                                    // self.ui_values.ui_lights.push(light);
+                                if ui.button("Add New Light Source").clicked() {
+                                    let spectrum = match self.ui_values.spectra.first() {
+                                        Some(spectrum) => spectrum.clone(),
+                                        None => {Rc::new(RefCell::new(UISpectrum::default()))}
+                                    };
+                                    let light = UILight::new(0.0, 0.0, 0.0, spectrum, "New Light Source".to_string());
+                                    self.ui_values.ui_lights.push(light);
                                 }
                             });
                         });
@@ -1517,8 +1632,31 @@ impl eframe::App for App {
                                 });
                                 ui.add_space(10.0);
 
-                                ui.label("Spectra:");
+                                //name and add button
+                                ui.horizontal_top(|ui| {
+                                    ui.label("Spectra:");
+                                    ui.add_space(100.0);
+                                    if ui.button("Add new Spectrum").clicked() {
+                                        let spectrum = UISpectrum::new(
+                                            "New Spectrum".to_string(),
+                                            UISpectrumType::Solar(0.001),
+                                            SpectrumEffectType::Emissive,
+                                            Spectrum::new_sunlight_spectrum(
+                                                self.ui_values.spectrum_lower_bound,
+                                                self.ui_values.spectrum_upper_bound,
+                                                self.ui_values.spectrum_number_of_samples,
+                                                0.001,
+                                            )
+                                        );
+                                        self.ui_values.spectra.push(
+                                            Rc::new(RefCell::new(spectrum))
+                                        );
+                                    }
+                                });
+                                
+                                //individual spectra
                                 for index in 0..self.ui_values.spectra.len() {
+                                    //determine color
                                     let mut color = Color32::LIGHT_GRAY;
                                     if let Some(selected_index) = &mut self.ui_values.selected_spectrum {
                                         let selected_index = selected_index.selected_spectrum;
@@ -1527,6 +1665,7 @@ impl eframe::App for App {
                                         }
                                     }
 
+                                    //add actual spectrum UI elements
                                     if ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
                                         egui::Frame::NONE.fill(color).inner_margin(5.0).show(ui, |ui| {
                                             self.display_spectrum_settings(ui, index);

@@ -111,7 +111,7 @@ impl Spectrum {
         let mut wavelengths = Vec::with_capacity(nbr_of_samples);
 
         let mut current = lowest_wavelength;
-        while current <= highest_wavelength {
+        while current <= highest_wavelength + step / 2.0 {  //adding half a step to ensure proper floating point accuracy
             let temperature_value = black_body_radiation(current as f64, temp_in_kelvin as f64) as f32;
             wavelengths.push(temperature_value * multiplier);
             current += step;
@@ -241,7 +241,7 @@ impl Spectrum {
     
     /// Takes the given bounds as the new lower and upper bound, adjusting the samples accordingly. 
     /// //TODO if sampling out of old bounds, nearest neighbor ?
-    pub fn rebound(&mut self, lower_bound: f32, upper_bound: f32) {
+    pub fn rebound(&mut self, _lower_bound: f32, _upper_bound: f32) {
         todo!()
     }
     
@@ -290,7 +290,6 @@ impl Spectrum {
         let step = iter.step;
         iter.map(|(_, spectral_radiance)| spectral_radiance * step)
             .fold(0f32, |acc, elem| acc + elem) 
-            // self.nbr_of_samples as f32
     }
 }
 

@@ -7,8 +7,8 @@ pub const NUMBER_OF_PARALLEL_THREADS_TOOLTIP: &str  = "The number of parallel th
     the number by one or two.";
 pub const NUMBER_OF_ITERATIONS_TOOLTIP: &str  = "The number of frames generated to form the final \
     image. Higher numbers take proportionally more time to render, but reduce the noise in the \
-    image, as well as make the lighting more correct. For very good results, use numbers greater \
-    than 1000.";
+    image, as well as make the lighting more correct. For decent results, use numbers greater than \
+    100. For very good results, greater than 1000.";
 
 
 // objects
@@ -30,6 +30,11 @@ pub const OBJECT_METALLICNESS_TOOLTIP: &str = "The metallicness of the material 
 pub const OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP: &str = "The width, height and depth of an \
     axis-aligned box."; 
 pub const OBJECT_SPHERE_RADIUS_TOOLTIP: &str = "The radius of the sphere.";
+pub const LIGHT_SPECTRUM_TOOLTIP: &str = "The spectrum emitted by this light source. Individual \
+    spectra can be adjusted in their respective tab.";
+pub const OBJECT_SPECTRUM_REFLECTING_TOOLTIP: &str = "The spectrum reflected by the object. Each \
+    sample value is the share of this wavelength that is reflected. A spectrum of only 1 will \
+    fully reflect every wavelength, essentially a perfectly white body.";
 
 
 //spectra and materials
@@ -56,4 +61,7 @@ pub const SPECTRUM_EFFECT_TYPE_TOOLTIP: &str = "The way the spectrum is intended
     2. Reflecting: The spectrum is not emitted. Instead it describes the share of each wavelength \
     that is reflected. Under white light, a reflecting spectrum with only 0.5 as its values will \
     appear as a medium gray. Reflection values must be in range [0; 1].";
-pub const SPECTRUM_RADIANCE_TOOLTIP: &str = "TODO!";    //TODO describe effect 
+pub const SPECTRUM_RADIANCE_TOOLTIP: &str = "The radiance of the spectrum. The higher the number, \
+    the greater the energy that is emitted.";
+pub const SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP: &str = "Editing the wavelength is not \
+   yet supported. Currently, only the entire visible spectrum can be used";
