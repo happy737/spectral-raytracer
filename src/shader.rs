@@ -126,10 +126,10 @@ impl From<&UIObject> for Aabb {
         let pos = point![value.pos_x, value.pos_y, value.pos_z];
         match value.ui_object_type {
             UIObjectType::PlainBox(x_length, y_length, z_length) => {
-                Aabb::new_box(&pos, x_length, y_length, z_length, value.spectrum.clone(), value.metallicness)
+                Aabb::new_box(&pos, x_length, y_length, z_length, value.spectrum.borrow().spectrum.clone(), value.metallicness)
             }
             UIObjectType::Sphere(radius) => {
-                Aabb::new_sphere(&pos, radius, value.spectrum.clone(), value.metallicness)
+                Aabb::new_sphere(&pos, radius, value.spectrum.borrow().spectrum.clone(), value.metallicness)
             }
         }
     }
@@ -150,7 +150,8 @@ impl Light {
 
 impl From<&UILight> for Light {
     fn from(value: &UILight) -> Self {
-        Light::new(point![value.pos_x, value.pos_y, value.pos_z], value.spectrum.clone())
+        Light::new(point![value.pos_x, value.pos_y, value.pos_z], 
+                   value.spectrum.borrow().spectrum.clone())
     }
 }
 

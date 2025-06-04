@@ -618,11 +618,45 @@ impl App {
                 ui_spectrum.spectrum_effect_type = selected_type;
                 self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
             }
-            //TODO
         });
+
+        //spectrum type sub settings
+        let mut changed = false;
+        match &mut ui_spectrum.spectrum_type {
+            UISpectrumType::Solar(factor) | UISpectrumType::PlainReflective(factor) => {
+                changed = display_factor(ui, factor) || changed;
+            }
+            UISpectrumType::Temperature(temp, factor) => {
+                //temperature
+                ui.horizontal_top(|ui| {
+                    let mut temp_string = temp.to_string();
+
+                    ui.label("Black body radiation temperature:");
+                    ui.text_edit_singleline(&mut temp_string);
+
+                    if temp_string.parse::<f32>().is_ok() {
+                        let new_temp = temp_string.parse::<f32>().unwrap();
+                        if new_temp != *temp && new_temp > 0.0 {
+                            *temp = new_temp;
+                            changed = true;
+                        }
+                    }
+                });
+
+                //factor
+                changed = display_factor(ui, factor) || changed;
+            }
+            UISpectrumType::Custom => {}
+        }
         
-        //let spectrum = &mut ui_spectrum.spectrum;
+        
+        drop(ui_spectrum);  //I just pray that this is future-proof
+        if changed {
+            self.update_spectrum()
+        }
     }
+
+
 
     fn display_spectrum_right_side(&mut self, ui: &mut Ui) {
         match self.ui_values.selected_spectrum.as_mut() {
@@ -724,6 +758,8 @@ impl App {
 
     }
 
+    /// Takes the information from the UISpectrum at the given index, takes out all working
+    /// information, stores it in the UISelectedSpectrum and displays these on the right and sight.
     fn update_selected_spectrum(&mut self, index: usize) {
         let ui_spectrum = self.ui_values.spectra[index].borrow();
         let working_vec: Vec<f32> = ui_spectrum.spectrum.iter().map(|(_, value)| value).collect();
@@ -757,6 +793,8 @@ impl App {
         }
     }
 
+    /// Iterates over all ui spectra. All non-custom Spectra are simply generated again with the new 
+    /// sample size, for each custom spectrum [resample](Spectrum::resample) is called. 
     fn update_all_spectrum_sample_sizes(&mut self, nbr_of_samples: usize) {
         for ui_spectrum_ref in &mut self.ui_values.spectra {
             let mut ui_spectrum = ui_spectrum_ref.borrow_mut();
@@ -779,6 +817,12 @@ impl App {
             }
         }
         self.ui_values.after_ui_action = Some(AfterUIActions::DeselectSelectedSpectrum);
+    }
+
+    /// Updates all spectra. Currently, this simply calls [App::update_all_spectrum_sample_sizes].
+    /// This forces every non-custom UISpectrum to re-generate.
+    fn update_spectrum(&mut self) {
+        self.update_all_spectrum_sample_sizes(self.ui_values.spectrum_number_of_samples)
     }
     
     /// A single frame render process. Takes the uniforms and mixes the image into the 
@@ -964,12 +1008,27 @@ impl Default for UIFields {
             NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             0.001,
         );
+        let sun10 = UISpectrum::new(
+            "Close light source".to_string(),
+            UISpectrumType::Solar(0.001),
+            SpectrumEffectType::Emissive,
+            sun10,
+        );
+        let sun10 = Rc::from(RefCell::from(sun10));
+
         let sun1mil = Spectrum::new_sunlight_spectrum(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             100.0,
         );
+        let sun1mil = UISpectrum::new(
+            "Far away sun".to_string(),
+            UISpectrumType::Solar(100.0),
+            SpectrumEffectType::Emissive,
+            sun1mil,
+        );
+        let sun1mil = Rc::from(RefCell::from(sun1mil));
         let ui_lights = vec![
             UILight::new(0.0, 2.0, -1.0, sun10.clone()),
             UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone()),
@@ -981,12 +1040,28 @@ impl Default for UIFields {
             NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             0.7,
         );
+        let spectrum_grey = UISpectrum::new(
+            "Grey material".to_string(),
+            UISpectrumType::PlainReflective(0.7),
+            SpectrumEffectType::Reflective,
+            spectrum_grey,
+        );
+        let spectrum_grey = Rc::new(RefCell::new(spectrum_grey));
+
         let spectrum_white = Spectrum::new_singular_reflectance_factor(
             spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             1.0,
         );
+        let spectrum_white = UISpectrum::new(
+            "White material".to_string(),
+            UISpectrumType::PlainReflective(1.0),
+            SpectrumEffectType::Reflective,
+            spectrum_white,
+        );
+        let spectrum_white = Rc::new(RefCell::new(spectrum_white));
+
         let ui_objects = vec![
             UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 3.0)),
             UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
@@ -995,11 +1070,11 @@ impl Default for UIFields {
         ];
 
         let spectra = vec![
-            Rc::from(RefCell::from(UISpectrum::from(sun10))),
-            Rc::from(RefCell::from(UISpectrum::from(sun1mil))),
+            sun10,
+            sun1mil,
 
-            Rc::from(RefCell::from(UISpectrum::from(spectrum_white))),
-            Rc::from(RefCell::from(UISpectrum::from(spectrum_grey))),
+            spectrum_grey,
+            spectrum_white,
         ];
         
         
@@ -1046,6 +1121,16 @@ struct UISpectrum {
 }
 
 impl UISpectrum {
+    pub fn new(name: String, spectrum_type: UISpectrumType, spectrum_effect_type: SpectrumEffectType, spectrum: Spectrum) -> Self {
+        Self {
+            id: get_id(),
+            name,
+            spectrum_type,
+            spectrum_effect_type,
+            spectrum,
+        }
+    }
+
     /// Updates the UISpectrum. Overwrites the attached spectrum with the changes made by the user.
     pub fn edit(&mut self, update: &UISelectedSpectrum) {
         let spectrum = Spectrum::new_from_list(&update.spectrum_values, update.lower_bound, update.upper_bound);
@@ -1086,9 +1171,9 @@ impl Display for UISpectrumType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             UISpectrumType::Custom => write!(f, "Custom"),
-            UISpectrumType::Solar(x) => write!(f, "Solar spectrum"),
-            UISpectrumType::PlainReflective(x) => write!(f, "All the same"),
-            UISpectrumType::Temperature(x, y) => write!(f, "Temperature"),
+            UISpectrumType::Solar(_) => write!(f, "Solar spectrum"),
+            UISpectrumType::PlainReflective(_) => write!(f, "All the same"),
+            UISpectrumType::Temperature(_, _) => write!(f, "Temperature"),
         }
     }
 }
@@ -1118,11 +1203,11 @@ struct UILight {
     pos_x: f32,
     pos_y: f32,
     pos_z: f32,
-    spectrum: Spectrum,
+    spectrum: Rc<RefCell<UISpectrum>>,
 }
 
 impl UILight {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, spectrum: Spectrum) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, spectrum: Rc<RefCell<UISpectrum>>) -> Self {
         Self {
             pos_x,
             pos_y,
@@ -1173,12 +1258,12 @@ struct UIObject {
     pos_y: f32,
     pos_z: f32,
     metallicness: bool, 
-    spectrum: Spectrum,
+    spectrum: Rc<RefCell<UISpectrum>>,
     ui_object_type: UIObjectType,
 }
 
 impl UIObject {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, spectrum: Spectrum, ui_object_type: UIObjectType) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, spectrum: Rc<RefCell<UISpectrum>>, ui_object_type: UIObjectType) -> Self {
         Self {
             pos_x,
             pos_y,
@@ -1202,15 +1287,22 @@ impl Display for UIObject {
 
 impl Default for UIObject {
     fn default() -> Self {
+        let spectrum = Spectrum::new_singular_reflectance_factor(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            32, 0.7);
+        let spectrum = UISpectrum::new(
+            "REPLACE ME".to_string(),
+            UISpectrumType::PlainReflective(0.7),
+            SpectrumEffectType::Reflective,
+            spectrum,
+        );
         Self {
             pos_x: 0.0, 
             pos_y: 0.0, 
             pos_z: 0.0,
             metallicness: false,
-            spectrum: Spectrum::new_singular_reflectance_factor(
-                spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND, 
-                spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND, 
-                32, 0.7),
+            spectrum: Rc::new(RefCell::new(spectrum)),
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
         }
     }
@@ -1271,6 +1363,28 @@ fn determine_optimal_thread_count() -> usize {
             NBR_OF_THREADS_DEFAULT
         }
     }
+}
+
+/// Generates a singular horizontal ui line, inserts the label "Brightness factor" and puts the
+/// supplied factor into a text edit field with the only check being: factor > 0.0.
+/// Returns true iff the value has been changed. 
+fn display_factor(ui: &mut Ui, factor: &mut f32) -> bool {
+    let mut changed = false;
+    ui.horizontal_top(|ui| {
+        let mut factor_string = factor.to_string();
+
+        ui.label("Brightness factor:");
+        ui.text_edit_singleline(&mut factor_string);
+
+        if factor_string.parse::<f32>().is_ok() {
+            let new_factor = factor_string.parse::<f32>().unwrap();
+            if new_factor != *factor && new_factor > 0.0 {
+                *factor = new_factor;
+                changed = true;
+            }
+        }
+    });
+    changed
 }
 
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
@@ -1392,11 +1506,6 @@ impl eframe::App for App {
                     });
                 }
                 UiTab::SpectraAndMaterials => {
-                    //TODO remove
-                    ui.vertical_centered_justified(|ui| {
-                        ui.label("ATTENTION! THIS PAGE IS NOT YET FUNCTIONAL!");
-                    });
-
                     ui.horizontal_top(|ui| {
                         //left
                         ui.vertical(|ui| {

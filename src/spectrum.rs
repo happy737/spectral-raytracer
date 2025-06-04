@@ -290,7 +290,7 @@ impl Spectrum {
         let step = iter.step;
         iter.map(|(_, spectral_radiance)| spectral_radiance * step)
             .fold(0f32, |acc, elem| acc + elem) 
-            / self.nbr_of_samples as f32
+            // self.nbr_of_samples as f32
     }
 }
 
