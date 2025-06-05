@@ -45,11 +45,12 @@ struct Ray {
     max_bounces: u32,
     original_pixel_pos: PixelPos,
     hit_distance: f32,
+    max_hit_distance: f32,
 }
 impl Ray {
     /// Creates a new standard Ray with default values for the values which will be written to in 
     /// the shaders. 
-    fn new(origin: Point3<f32>, direction: Vector3<f32>, max_bounces: u32, 
+    fn new(origin: Point3<f32>, direction: Vector3<f32>, max_bounces: u32,
            original_pixel_pos: PixelPos, example_spectrum: &Spectrum) -> Ray {
         Ray {
             origin,
@@ -60,6 +61,7 @@ impl Ray {
             max_bounces,
             original_pixel_pos,
             hit_distance: 0.0,
+            max_hit_distance: f32::INFINITY,
         }
     }
     
@@ -67,16 +69,19 @@ impl Ray {
     /// can thus be used to determine if an unobstructed line to another point exists. The 
     /// closest-hit shader will not be executed for this ray. The field hit will be set to true if 
     /// anything is hit. 
-    fn new_shadow_ray(origin: Point3<f32>, direction: Vector3<f32>, example_spectrum: &Spectrum) -> Ray {
+    fn new_shadow_ray(origin: Point3<f32>, direction: Vector3<f32>, max_hit_distance: f32, 
+                      example_spectrum: &Spectrum) -> Ray 
+    {
         Ray {
             origin, 
             direction,
             hit: false,
             spectrum: Spectrum::new_equal_size_empty_spectrum(example_spectrum),    //TODO maybe refactor this out
             skip_hit_shader: true,
-            max_bounces: 1, //technically unnecessary
+            max_bounces: 2, //technically unnecessary
             original_pixel_pos: PixelPos {x:0, y:0},    //dummy value
             hit_distance: 0.0,
+            max_hit_distance,
         }
     }
 }
@@ -307,7 +312,9 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         // have already paid the square tax. 
         for light in uniforms.lights.iter() {
             let direction = light.position - new_shot_rays_pos;
-            let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction, &ray.spectrum);
+            let distance = direction.magnitude();
+            let direction_norm = direction.normalize();
+            let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction_norm, distance, &ray.spectrum);
             submit_ray(&mut shadow_ray, uniforms);
             
             if !shadow_ray.hit {
@@ -316,10 +323,13 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                 
                 //adjust for incoming ray angle
                 adjusted *= shadow_ray.direction.normalize().dot(&normal)
-                    .clamp(0.0, f32::INFINITY);
+                    //.clamp(0.0, f32::INFINITY);
+                    .max(0.0);
                 
                 //adjust for outgoing ray angle
-                adjusted *= (-ray.direction).dot(&normal).clamp(0.0, f32::INFINITY);
+                adjusted *= (-ray.direction).dot(&normal)
+                    //.clamp(0.0, f32::INFINITY);
+                    .max(0.0);
                 
                 received_spectrum += &adjusted;
             }
@@ -376,7 +386,9 @@ fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     for aabb in uniforms.aabbs.iter() {
         if let Some((_t_min, _t_max)) = ray_aabb_intersection(ray, &aabb.min, &aabb.max) {
             if let Some(t) = intersection_shader(ray, aabb) {
-                intersections.push((aabb, t));
+                if t > 0.0 {
+                    intersections.push((aabb, t));
+                }
             }
         }
     }
@@ -384,10 +396,12 @@ fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     intersections.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
     
     if let Some((aabb, t)) = intersections.first() {
-        if !ray.skip_hit_shader {
-            hit_shader(ray, aabb, *t, uniforms);
-        } else {
-            ray.hit = true;
+        if t <= &ray.max_hit_distance {
+            if !ray.skip_hit_shader {
+                hit_shader(ray, aabb, *t, uniforms);
+            } else {
+                ray.hit = true;
+            }
         }
 
     } else {
@@ -528,7 +542,7 @@ fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {    //TO
 }
 
 /// Reflects a vector incident about the given normal (which must be normalized for correct results).
-/// The incident must point towards the normal, not away as one might think. 
+/// The incident must point towards the normal, not away as one might think.
 fn reflect_vec(incident: &Vector3<f32>, normal: &Vector3<f32>) -> Vector3<f32> {
     incident - 2.0 * normal.dot(incident) * normal
 }
