@@ -456,19 +456,19 @@ impl App {
 
                     if dim_x_string.parse::<f32>().is_ok() {
                         let new_length_x = dim_x_string.parse::<f32>().unwrap();
-                        if new_length_x >= 0.0 && new_length_x != x_length {
+                        if new_length_x > 0.0 && new_length_x != x_length {
                             object.ui_object_type = UIObjectType::PlainBox(new_length_x, y_length, z_length);
                         }
                     }
                     if dim_y_string.parse::<f32>().is_ok() {
                         let new_length_y = dim_y_string.parse::<f32>().unwrap();
-                        if new_length_y >= 0.0 && new_length_y != y_length {
+                        if new_length_y > 0.0 && new_length_y != y_length {
                             object.ui_object_type = UIObjectType::PlainBox(x_length, new_length_y, z_length);
                         }
                     }
                     if dim_z_string.parse::<f32>().is_ok() {
                         let new_length_z = dim_z_string.parse::<f32>().unwrap();
-                        if new_length_z >= 0.0 && new_length_z != z_length {
+                        if new_length_z > 0.0 && new_length_z != z_length {
                             object.ui_object_type = UIObjectType::PlainBox(x_length, y_length, new_length_z);
                         }
                     }
@@ -483,7 +483,7 @@ impl App {
                     
                     if radius_string.parse::<f32>().is_ok() {
                         let new_radius = radius_string.parse::<f32>().unwrap();
-                        if new_radius >= 0.0 {
+                        if new_radius > 0.0 {
                             object.ui_object_type = UIObjectType::Sphere(new_radius);
                         }
                     }
@@ -1191,7 +1191,7 @@ impl Default for UIFields {
         let spectrum_white = Rc::new(RefCell::new(spectrum_white));
 
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 3.0), "Left mirror".to_string()),
+            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 30.0), "Left mirror".to_string()),
             UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Left sphere".to_string()),
             UIObject::new(1.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Right sphere".to_string()),
             UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0), "Floor".to_string()),
@@ -1601,6 +1601,9 @@ fn is_time_even() -> bool {
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
 //TODO maybe start a parallel thread which calls a frame update every second when rendering 
+//TODO abort render button
+//TODO new dedicated render button, for the second, etc render calls
+//TODO way to disable an object without actually deleting it
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
         //Top Menu bar (File, Edit, ...)
