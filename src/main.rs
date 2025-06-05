@@ -25,7 +25,7 @@ use crate::text_resources::*;
 
 const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
-const NBR_OF_ITERATIONS_DEFAULT: u32 = 128;
+const NBR_OF_ITERATIONS_DEFAULT: u32 = 100;
 const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 32;
 
 static COUNTER: AtomicU32 = AtomicU32::new(1);
@@ -297,9 +297,8 @@ impl App {
         
         //name
         ui.horizontal_top(|ui| {
-            let name = if light.name.is_empty() 
-                {&format!("Light Source #{}", index)} else {&light.name};
-            ui.label(name);
+            let backup_name = &format!("Light Source #{index}");
+            display_name_with_edit(ui, &mut light.name, backup_name, &mut light.editing_name);
             ui.add_space(100.0);
             
             let delete_button = egui::widgets::Button::new("Delete this light source").fill(Color32::LIGHT_RED);
@@ -363,8 +362,8 @@ impl App {
 
         //name
         ui.horizontal_top(|ui| {
-            let name = format!("{} #{}", object, index);
-            ui.label(name);
+            let backup_name = &format!("{object} #{index}");
+            display_name_with_edit(ui, &mut object.name, backup_name, &mut object.editing_name);
             ui.add_space(30.0);
             
             #[derive(PartialEq, Clone, Copy, Debug)]
@@ -603,14 +602,12 @@ impl App {
         
         //name and delete button
         ui.horizontal_top(|ui| {
-            //TODO enable name changing
-            let name = if ui_spectrum.name.is_empty() {
-                format!("Spectrum {}", index)
-            } else {
-                ui_spectrum.name.clone()
-            };
-            
-            ui.label(name);
+            //name
+            //moving out the bool since multiple mutable access are not allowed for Ref<_>. 
+            let mut editing_name = ui_spectrum.editing_name;
+            let backup_name = &format!("Spectrum {}", index);
+            display_name_with_edit(ui, &mut ui_spectrum.name, backup_name, &mut editing_name);
+            ui_spectrum.editing_name = editing_name;
             
             ui.add_space(80.0);
 
@@ -1076,8 +1073,8 @@ impl App {
         lights_ok && objects_ok && spectra_ok
     }
 
-    /// Checks if all [UILights](main::UILight) are in order. Returns false if the rendering process 
-    /// would fail. //TODO wrong link
+    /// Checks if all [UILights](UILight) are in order. Returns false if the rendering process
+    /// would fail.
     fn check_lights_legality(&self) -> bool {
         self.ui_values.ui_lights.iter()
             .map(|l| self.ui_values.spectra.contains(&l.spectrum))
@@ -1192,10 +1189,10 @@ impl Default for UIFields {
         let spectrum_white = Rc::new(RefCell::new(spectrum_white));
 
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 3.0)),
-            UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
-            UIObject::new(1.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0)),
-            UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0)),
+            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 3.0), "Left mirror".to_string()),
+            UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Left sphere".to_string()),
+            UIObject::new(1.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Right sphere".to_string()),
+            UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0), "Floor".to_string()),
         ];
 
         let spectra = vec![
@@ -1244,6 +1241,7 @@ struct UISelectedSpectrum {
 struct UISpectrum {
     id: u32,
     name: String,
+    editing_name: bool,
     spectrum_type: UISpectrumType,
     spectrum_effect_type: SpectrumEffectType,
     spectrum: Spectrum,
@@ -1254,6 +1252,7 @@ impl UISpectrum {
         Self {
             id: get_id(),
             name,
+            editing_name: false,
             spectrum_type,
             spectrum_effect_type,
             spectrum,
@@ -1342,6 +1341,7 @@ impl From<Spectrum> for UISpectrum {
         Self {
             id: get_id(),
             name: String::new(),
+            editing_name: false,
             spectrum_type: UISpectrumType::Custom,
             spectrum_effect_type: SpectrumEffectType::Emissive,
             spectrum,
@@ -1364,6 +1364,7 @@ struct UILight {
     pos_z: f32,
     spectrum: Rc<RefCell<UISpectrum>>,
     name: String,
+    editing_name: bool,
 }
 
 impl UILight {
@@ -1374,6 +1375,7 @@ impl UILight {
             pos_z,
             spectrum,
             name,
+            editing_name: false,
         }
     }
 }
@@ -1421,10 +1423,12 @@ struct UIObject {
     metallicness: bool, 
     spectrum: Rc<RefCell<UISpectrum>>,
     ui_object_type: UIObjectType,
+    name: String,
+    editing_name: bool,
 }
 
 impl UIObject {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, spectrum: Rc<RefCell<UISpectrum>>, ui_object_type: UIObjectType) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, spectrum: Rc<RefCell<UISpectrum>>, ui_object_type: UIObjectType, name: String) -> Self {
         Self {
             pos_x,
             pos_y,
@@ -1432,6 +1436,8 @@ impl UIObject {
             metallicness, 
             spectrum,
             ui_object_type,
+            name,
+            editing_name: false,
         }
     }
 
@@ -1462,6 +1468,8 @@ impl UIObject {
             metallicness: false,
             spectrum,
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
+            name: "New Object".to_string(),
+            editing_name: false,
         }
     }
 }
@@ -1556,6 +1564,31 @@ fn display_factor(ui: &mut Ui, factor: &mut f32) -> bool {
         }
     });
     changed
+}
+
+/// Displays a button with a pencil emoji as label to indicate that something can be edited. 
+fn display_edit_name_button(ui: &mut Ui, changing_value: &mut bool) {
+    if ui.button(EDIT_BUTTON_PENCIL_EMOJI).clicked() {
+        *changing_value = !*changing_value;
+    }
+}
+
+/// Displays the name of an object in a label or in a text field, depending on the value in editing. 
+/// Additionally, displays an edit button to toggle between the two states. 
+fn display_name_with_edit(ui: &mut Ui, name: &mut String, backup: &String, editing: &mut bool) {
+    if *editing {
+        if ui.text_edit_singleline(name).lost_focus() {
+            *editing = false;
+        }
+    } else {
+        let label_content = if name.is_empty() {
+            backup
+        } else {
+            name
+        };
+        ui.label(label_content);
+    }
+    display_edit_name_button(ui, editing);
 }
 
 /// Returns true for one second, false for the next, then true again, etc. 

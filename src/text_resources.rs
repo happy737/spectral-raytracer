@@ -72,3 +72,6 @@ pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not
 //display
 pub const DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP: &str = "Cannot start rendering right \
     now. Maybe some lights or objects have illegal spectra assigned?";
+
+//other stuff
+pub const EDIT_BUTTON_PENCIL_EMOJI: &str = "✏";
