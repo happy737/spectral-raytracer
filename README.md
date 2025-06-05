@@ -12,6 +12,8 @@ The project is currently under development, anything written here is subject to 
 Many features are yet to be implemented or improved, the raytracing shaders are far from
 complete and true to nature, and the UI currently is only a functional placeholder. 
 
+![Rendered example image of the default scene](./example_image.png "Render of the example scene over 1000 iterations")
+
 ## How do I use the Spectral Raytracer?
 ### Installing the Raytracer
 As of now, the raytracer is only one statically linked executable. If an executable file 
