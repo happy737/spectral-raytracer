@@ -305,7 +305,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         //direct light contributions via light sources
         //important: ONLY HERE is the light intensity divided by distance squared, reflected rays
         // have already paid the square tax. 
-        for light in uniforms.lights.iter() {   //TODO some reflective fuckyness is going on here. See early_reflection.png
+        for light in uniforms.lights.iter() {
             let direction = light.position - new_shot_rays_pos;
             let mut shadow_ray = Ray::new_shadow_ray(new_shot_rays_pos, direction, &ray.spectrum);
             submit_ray(&mut shadow_ray, uniforms);
@@ -527,7 +527,8 @@ fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {    //TO
     )
 }
 
-///TODO reflects vector but what direction does incident have to be?
+/// Reflects a vector incident about the given normal (which must be normalized for correct results).
+/// The incident must point towards the normal, not away as one might think. 
 fn reflect_vec(incident: &Vector3<f32>, normal: &Vector3<f32>) -> Vector3<f32> {
     incident - 2.0 * normal.dot(incident) * normal
 }

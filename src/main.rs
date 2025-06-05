@@ -1070,7 +1070,9 @@ impl App {
             .map(|s| s.borrow().spectrum.get_nbr_of_samples() == ui_sample_nbr)
             .all(|b| b);
         
-        lights_ok && objects_ok && spectra_ok
+        let not_currently_rendering = !*self.currently_rendering.lock().unwrap();
+        
+        lights_ok && objects_ok && spectra_ok && not_currently_rendering
     }
 
     /// Checks if all [UILights](UILight) are in order. Returns false if the rendering process
@@ -1568,7 +1570,7 @@ fn display_factor(ui: &mut Ui, factor: &mut f32) -> bool {
 
 /// Displays a button with a pencil emoji as label to indicate that something can be edited. 
 fn display_edit_name_button(ui: &mut Ui, changing_value: &mut bool) {
-    if ui.button(EDIT_BUTTON_PENCIL_EMOJI).clicked() {
+    if ui.button(EDIT_BUTTON_PENCIL_EMOJI).on_hover_text(EDIT_BUTTON_TOOLTIP).clicked() {
         *changing_value = !*changing_value;
     }
 }
@@ -1598,9 +1600,7 @@ fn is_time_even() -> bool {
 
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
-//TODO maybe give UIObjects a string field to be able to name them? (ie. object such as "wall" or "floor")
 //TODO maybe start a parallel thread which calls a frame update every second when rendering 
-//TODO disable start rendering button when already rendering
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
         //Top Menu bar (File, Edit, ...)
@@ -1611,7 +1611,11 @@ impl eframe::App for App {
                                       egui::Button::new("Save Image"))
                         .clicked() {
                         
-                        let dialog = rfd::FileDialog::new() //TODO make it save as certain datatypes only, currently "image" without datatype is valid
+                        let dialog = rfd::FileDialog::new()
+                            .add_filter("PNG", &["png"])
+                            .add_filter("JPG", &["jpg"])
+                            .add_filter("BMP", &["bmp"])
+                            .add_filter("TIFF", &["tiff"])
                             .set_file_name("image.png")
                             .save_file();
                         if let Some(path) = dialog {
