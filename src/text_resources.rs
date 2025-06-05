@@ -68,3 +68,7 @@ pub const SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP: &str = "Editing the wa
 pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not allowed unless \
     their type has been changed to custom. After a spectrum is converted to custom, the number of \
     samples should no longer be changed.";
+
+//display
+pub const DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP: &str = "Cannot start rendering right \
+    now. Maybe some lights or objects have illegal spectra assigned?";

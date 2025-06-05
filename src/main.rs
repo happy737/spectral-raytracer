@@ -5,12 +5,13 @@ mod spectral_data;
 mod text_resources;
 
 use std::cell::RefCell;
+use std::cmp::PartialEq;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use std::sync::{mpsc, Arc, Mutex};
 use std::sync::atomic::AtomicU32;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use eframe::egui;
 use eframe::egui::{menu, Color32, ComboBox, IconData, Sense, TextEdit, TopBottomPanel, Ui, UiBuilder};
 use eframe::epaint::Vec2;
@@ -333,11 +334,17 @@ impl App {
 
         //light spectrum
         ui.horizontal_top(|ui| {
-            ui.label("Spectrum:").on_hover_text(LIGHT_SPECTRUM_TOOLTIP);
+            let label_color = if !self.ui_values.spectra.contains(&light.spectrum) && is_time_even() {
+                Color32::RED
+            } else {
+                Color32::DARK_GRAY
+            };
+            ui.colored_label(label_color, "Spectrum").on_hover_text(LIGHT_SPECTRUM_TOOLTIP);
+
             let borrow = light.spectrum.borrow();
             let selected_text = borrow.to_string();
             drop(borrow);
-
+            
             ComboBox::new(format!("light source {index} spectrum"), "")
                 .selected_text(selected_text)
                 .show_ui(ui, |ui| {
@@ -484,15 +491,21 @@ impl App {
                 });
             }
         }
-        
+
         //reflecting spectrum
         ui.horizontal_top(|ui| {
-            ui.label("Reflecting factor Spectrum:").on_hover_text(OBJECT_SPECTRUM_REFLECTING_TOOLTIP);
+            let label_color = if !self.ui_values.spectra.contains(&object.spectrum) && is_time_even() {
+                Color32::RED
+            } else {
+                Color32::DARK_GRAY
+            };
+            ui.colored_label(label_color, "Reflecting factor Spectrum:").on_hover_text(OBJECT_SPECTRUM_REFLECTING_TOOLTIP);
+            
             let borrow = object.spectrum.borrow();
             let selected_text = borrow.to_string();
             drop(borrow);
-            
-            ComboBox::new(format!("object reflecting {index} spectrum"), "") 
+
+            ComboBox::new(format!("object reflecting {index} spectrum"), "")
                 .selected_text(selected_text)
                 .show_ui(ui, |ui| {
                     for spectrum in &self.ui_values.spectra {
@@ -619,7 +632,7 @@ impl App {
                     ui.selectable_value(&mut selected_type, UISpectrumType::Solar(1.0), format!("{}", UISpectrumType::Solar(1.0)));
                     ui.selectable_value(&mut selected_type, UISpectrumType::PlainReflective(1.0), format!("{}", UISpectrumType::PlainReflective(1.0)));
                     ui.selectable_value(&mut selected_type, UISpectrumType::Temperature(1000.0, 1.0), format!("{}", UISpectrumType::Temperature(1.0, 1.0)));
-                }).response.on_hover_text(SPECTRUM_TYPE_TOOLTIP);   //TODO replace by ::default
+                }).response.on_hover_text(SPECTRUM_TYPE_TOOLTIP);
             
             if selected_type != ui_spectrum.spectrum_type {
                 ui_spectrum.spectrum_type = selected_type;
@@ -679,7 +692,7 @@ impl App {
 
                     ui.label("Black body radiation temperature:");
                     ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut temp_string));
-                    ui.label("K");  //TODO add support for different temperature scales
+                    ui.label("K");  //TODO add support for different temperature units
 
                     if temp_string.parse::<f32>().is_ok() {
                         let new_temp = temp_string.parse::<f32>().unwrap();
@@ -807,6 +820,22 @@ impl App {
             }
         }
 
+    }
+
+    /// Displays a single tab for the UITabs up top.
+    fn display_tab_frame(&mut self, ui: &mut Ui, label: &str, color: Color32, tab: UiTab) {
+        if ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+            egui::Frame::NONE.fill(color)
+                .outer_margin(0.0)
+                .inner_margin(5.0)
+                .show(ui, |ui| {
+                    let label = egui::Label::new(label)
+                        .selectable(false);
+                    ui.add(label);
+                });
+        }).response.clicked()  {
+            self.ui_values.tab = tab;
+        };
     }
 
     /// Takes the information from the UISpectrum at the given index, takes out all working
@@ -1004,6 +1033,8 @@ impl App {
         let rendering = self.currently_rendering.clone();
         let action_list = self.actions.clone();
         
+        self.ui_values.tab = UiTab::Display;
+        
         thread::spawn(move || {
             Self::render(image, uniforms, thread_pool, nbr_of_iterations, rendering, action_list);
         });
@@ -1033,13 +1064,9 @@ impl App {
     /// Checks if all values about to be passed to the renderer are in order. This function should
     /// return false if an error exists which will make the renderer crash. 
     fn check_render_legality(&self) -> bool {
-        let lights_ok = self.ui_values.ui_lights.iter()
-            .map(|l| self.ui_values.spectra.contains(&l.spectrum))
-            .all(|b| b);
+        let lights_ok = self.check_lights_legality();
         
-        let objects_ok = self.ui_values.ui_objects.iter()
-            .map(|o| self.ui_values.spectra.contains(&o.spectrum))
-            .all(|b| b);
+        let objects_ok = self.check_objects_legality();
         
         let ui_sample_nbr = self.ui_values.spectrum_number_of_samples;
         let spectra_ok = self.ui_values.spectra.iter()
@@ -1047,6 +1074,20 @@ impl App {
             .all(|b| b);
         
         lights_ok && objects_ok && spectra_ok
+    }
+
+    /// Checks if all [UILights](main::UILight) are in order. Returns false if the rendering process 
+    /// would fail. //TODO wrong link
+    fn check_lights_legality(&self) -> bool {
+        self.ui_values.ui_lights.iter()
+            .map(|l| self.ui_values.spectra.contains(&l.spectrum))
+            .all(|b| b)
+    }
+    
+    fn check_objects_legality(&self) -> bool {
+        self.ui_values.ui_objects.iter()
+            .map(|o| self.ui_values.spectra.contains(&o.spectrum))
+            .all(|b| b)
     }
 }
 
@@ -1097,7 +1138,7 @@ impl Default for UIFields {
             0.001,
         );
         let sun10 = UISpectrum::new(
-            "Close light source".to_string(),
+            "Close light spectrum".to_string(),
             UISpectrumType::Solar(0.001),
             SpectrumEffectType::Emissive,
             sun10,
@@ -1111,7 +1152,7 @@ impl Default for UIFields {
             100.0,
         );
         let sun1mil = UISpectrum::new(
-            "Far away sun".to_string(),
+            "Far away sun spectrum".to_string(),
             UISpectrumType::Solar(100.0),
             SpectrumEffectType::Emissive,
             sun1mil,
@@ -1119,7 +1160,7 @@ impl Default for UIFields {
         let sun1mil = Rc::from(RefCell::from(sun1mil));
         let ui_lights = vec![
             UILight::new(0.0, 2.0, -1.0, sun10.clone(), "Close light".to_string()),
-            UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone(), "Far away sun".to_string()),
+            UILight::new(0.0, 1_000.0, 0.0, sun1mil.clone(), "Far away sun light".to_string()),
         ];
         
         let spectrum_grey = Spectrum::new_singular_reflectance_factor(
@@ -1129,7 +1170,7 @@ impl Default for UIFields {
             0.7,
         );
         let spectrum_grey = UISpectrum::new(
-            "Grey material".to_string(),
+            "Grey reflecting spectrum".to_string(),
             UISpectrumType::PlainReflective(0.7),
             SpectrumEffectType::Reflective,
             spectrum_grey,
@@ -1143,7 +1184,7 @@ impl Default for UIFields {
             1.0,
         );
         let spectrum_white = UISpectrum::new(
-            "White material".to_string(),
+            "White reflecting spectrum".to_string(),
             UISpectrumType::PlainReflective(1.0),
             SpectrumEffectType::Reflective,
             spectrum_white,
@@ -1233,8 +1274,8 @@ impl Default for UISpectrum {
             UISpectrumType::PlainReflective(0.0),
             SpectrumEffectType::Emissive,
             Spectrum::new_singular_reflectance_factor(
-                1.0, 
-                2.0, 
+                1.0,
+                2.0,
                 NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
                 0.0,
             )
@@ -1248,6 +1289,10 @@ impl Display for UISpectrum {
     }
 }
 
+/// An enum to differentiate between the uses of spectra. Emissive spectra are "true" spectra as in 
+/// they portray the composition of light. Reflective spectra are not spectra per se, more are they 
+/// tables of percentages for how much a given wavelength is reflected. In the shader however, they 
+/// are the same datatype, therefore the UI does not discriminate on a type basis either.  
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum SpectrumEffectType {
     Emissive,
@@ -1267,6 +1312,10 @@ impl Display for SpectrumEffectType {
     }
 }
 
+/// An enum that represents the types of spectra a [UISpectrum] can have. When changing amount of 
+/// samples f. ex. each type is handled differently. For custom, each value is linearly interpolated 
+/// making the process quiet lossy. For every other type, the appropriate new [Spectrum] function is
+/// called and a new spectrum used instead. 
 #[derive(Clone, Copy, Debug)]
 #[derive(PartialEq)]
 enum UISpectrumType {
@@ -1385,7 +1434,7 @@ impl UIObject {
             ui_object_type,
         }
     }
-    
+
     pub fn default(app: &App) -> Self {
         let spectrum = match app.ui_values.spectra.first() {
             Some(spec_ref) => {
@@ -1405,7 +1454,7 @@ impl UIObject {
                 )))
             }
         };
-        
+
         Self {
             pos_x: 0.0,
             pos_y: 0.0,
@@ -1427,6 +1476,8 @@ impl Display for UIObject {
     }
 }
 
+/// An enum which differentiates the type of the [UIObjects](UIObject). Different types will be 
+/// assembled to different geometric shapes in the render process. 
 enum UIObjectType {
     PlainBox(f32, f32, f32),
     Sphere(f32),
@@ -1442,7 +1493,8 @@ impl UIObjectType {
     }
 }
 
-/// This enum differentiates which tab is currently displayed in the apps main content window. 
+/// This enum differentiates which tab is currently displayed in the apps main content window.
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum UiTab {
     Settings,   //pre render settings such as width, height or number of frames
     Objects,    //3D models and lights defined in the scene
@@ -1506,6 +1558,11 @@ fn display_factor(ui: &mut Ui, factor: &mut f32) -> bool {
     changed
 }
 
+/// Returns true for one second, false for the next, then true again, etc. 
+fn is_time_even() -> bool {
+    std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() % 2 == 0
+}
+
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
 //TODO maybe give UIObjects a string field to be able to name them? (ie. object such as "wall" or "floor")
@@ -1534,11 +1591,11 @@ impl eframe::App for App {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
-                    // if ui.button("Generate new blank Image").clicked() {
-                    //     self.generate_image_actual(ctx);
-                    //     self.generate_image_float();
-                    // }
-                    if ui.button("Start Rendering").clicked() {
+                    let button_render =  egui::Button::new("Start generating image");
+                    let enabled = self.check_render_legality(); //disable button when rendering would crash
+                    if ui.add_enabled(enabled, button_render)
+                        .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
+                        .clicked() {
                         self.dispatch_render();
                     }
                     if ui.button("Reset Settings to default").clicked() {
@@ -1550,20 +1607,33 @@ impl eframe::App for App {
         
         //main content div. 
         egui::CentralPanel::default().show(ctx, |ui| {
+            //tab "buttons"
             ui.vertical_centered(|ui| {
-                ui.horizontal_top(|ui| {    //TODO these buttons might be replaceable by frames with zero outer margin //frames are not clickable, check workaround
-                    if ui.button("Settings").clicked() {
-                        self.ui_values.tab = UiTab::Settings;
+                ui.horizontal_top(|ui| {
+                    let old_spacing = ui.style().spacing.clone();
+                    ui.style_mut().spacing.item_spacing.x = 0.0;
+                    ui.style_mut().spacing.item_spacing.y = 0.0;
+
+                    //settings
+                    let color = if self.ui_values.tab == UiTab::Settings {Color32::LIGHT_BLUE} else {Color32::LIGHT_GRAY};
+                    self.display_tab_frame(ui, "Settings", color, UiTab::Settings);
+
+                    //objects
+                    let mut color = if self.ui_values.tab == UiTab::Objects {Color32::LIGHT_BLUE} else {Color32::LIGHT_GRAY};
+                    if !(self.check_lights_legality() && self.check_objects_legality()) && is_time_even() {
+                        color = Color32::LIGHT_RED;
                     }
-                    if ui.button("Objects").clicked() {
-                        self.ui_values.tab = UiTab::Objects;
-                    }
-                    if ui.button("Spectra and Materials").clicked() {
-                        self.ui_values.tab = UiTab::SpectraAndMaterials;
-                    }
-                    if ui.button("Display").clicked() {
-                        self.ui_values.tab = UiTab::Display;
-                    }
+                    self.display_tab_frame(ui, "Objects", color, UiTab::Objects);
+
+                    //spectra and materials
+                    let color = if self.ui_values.tab == UiTab::SpectraAndMaterials {Color32::LIGHT_BLUE} else {Color32::LIGHT_GRAY};
+                    self.display_tab_frame(ui, "Spectra and Materials", color, UiTab::SpectraAndMaterials);
+
+                    //display
+                    let color = if self.ui_values.tab == UiTab::Display {Color32::LIGHT_BLUE} else {Color32::LIGHT_GRAY};
+                    self.display_tab_frame(ui, "Display", color, UiTab::Display);
+
+                    ui.style_mut().spacing = old_spacing;
                 });
             });
             
@@ -1660,7 +1730,7 @@ impl eframe::App for App {
                                         );
                                     }
                                 });
-                                
+
                                 //individual spectra
                                 for index in 0..self.ui_values.spectra.len() {
                                     //determine color
@@ -1713,8 +1783,16 @@ impl eframe::App for App {
                                     egui::Image::from_texture(img).fit_to_original_size(1.0)
                                 );
                             });
-                        } else if ui.button("Start generating image").clicked() {
-                            self.dispatch_render();
+                        } else {
+                            ui.centered_and_justified(|ui| {
+                                let button =  egui::Button::new("Start generating image");
+                                let enabled = self.check_render_legality(); //disable button when rendering would crash
+                                if ui.add_enabled(enabled, button)
+                                    .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
+                                    .clicked() {
+                                    self.dispatch_render();
+                                }
+                            });
                         }
                     });
                 }
