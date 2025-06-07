@@ -921,6 +921,18 @@ impl App {
         }
     }
     
+    /// Generates a button to start the render process. Is disabled if 
+    /// [check_render_legality](App::check_render_legality) returns false.
+    fn display_start_render_button(&mut self, ui: &mut Ui) {
+        let button_render =  egui::Button::new("Start generating image");
+        let enabled = self.check_render_legality(); //disable button when rendering would crash
+        if ui.add_enabled(enabled, button_render)
+            .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
+            .clicked() {
+            self.dispatch_render();
+        }
+    }
+    
     /// A single frame render process. Takes the uniforms and mixes the image into the 
     /// [CustomImage](custom_image::CustomImage) at the appropriate level. 
     fn apply_shader2(img: &mut custom_image::CustomImage, uniforms: Arc<RaytracingUniforms>, thread_pool: &ThreadPool) {
@@ -1643,7 +1655,6 @@ fn is_time_even() -> bool {
 
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
-//TODO maybe start a parallel thread which calls a frame update every second when rendering
 //TODO new dedicated render button, for the second, etc render calls
 //TODO way to disable an object without actually deleting it
 impl eframe::App for App {
@@ -1673,13 +1684,7 @@ impl eframe::App for App {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
-                    let button_render =  egui::Button::new("Start generating image");
-                    let enabled = self.check_render_legality(); //disable button when rendering would crash
-                    if ui.add_enabled(enabled, button_render)
-                        .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
-                        .clicked() {
-                        self.dispatch_render();
-                    }
+                    self.display_start_render_button(ui);
                     if ui.button("Reset Settings to default").clicked() {
                         self.ui_values = UIFields::default();
                     }
@@ -1850,6 +1855,7 @@ impl eframe::App for App {
                 UiTab::Display => {
                     //user information about rendering time
                     ui.horizontal_top(|ui| {
+                        self.display_start_render_button(ui);
                         self.display_abort_button(ui);
                         self.refresh_rendering_time();
                         self.display_frame_generation_time(ui);
@@ -1868,13 +1874,7 @@ impl eframe::App for App {
                             });
                         } else {
                             ui.centered_and_justified(|ui| {
-                                let button =  egui::Button::new("Start generating image");
-                                let enabled = self.check_render_legality(); //disable button when rendering would crash
-                                if ui.add_enabled(enabled, button)
-                                    .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
-                                    .clicked() {
-                                    self.dispatch_render();
-                                }
+                                self.display_start_render_button(ui);
                             });
                         }
                     });
