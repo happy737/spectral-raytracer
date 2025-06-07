@@ -8,7 +8,7 @@ pub const NUMBER_OF_PARALLEL_THREADS_TOOLTIP: &str  = "The number of parallel th
 pub const NUMBER_OF_ITERATIONS_TOOLTIP: &str  = "The number of frames generated to form the final \
     image. Higher numbers take proportionally more time to render, but reduce the noise in the \
     image, as well as make the lighting more correct. For decent results, use numbers greater than \
-    100. For very good results, greater than 1000.";
+    100. For good results, greater than 1000.";
 
 
 // objects

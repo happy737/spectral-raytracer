@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -907,8 +907,8 @@ impl App {
     fn update_spectrum(&mut self) {
         self.update_all_spectrum_sample_sizes(self.ui_values.spectrum_number_of_samples)
     }
-    
-    /// Generates a button to abort the current rendering process. The button is disabled when 
+
+    /// Generates a button to abort the current rendering process. The button is disabled when
     /// nothing is being rendered.
     fn display_abort_button(&mut self, ui: &mut Ui) {
         let enabled = self.app_to_render_channel.is_some();
@@ -994,15 +994,12 @@ impl App {
             }
 
             //check if any messages have been passed back
-            match receiver.try_recv() {
-                Ok(message) => {
-                    match message {
-                        AppToRenderMessages::AbortRender => {
-                            break;  //simply jump out of loop to stop rendering
-                        }
+            if let Ok(message) = receiver.try_recv() {
+                match message {
+                    AppToRenderMessages::AbortRender => {
+                        break;  //simply jump out of loop to stop rendering
                     }
                 }
-                Err(_) => {}
             }
         }
 
@@ -1013,7 +1010,7 @@ impl App {
         {   //giving the ui the final rendering time in case it cannot compute it on its own
             let mut action_list = action_list.lock().unwrap();
             action_list.push(AppActions::TrueTimeUpdate(Instant::now() - begin_time));
-            
+
             //telling the app to destroy its render sender
             action_list.push(AppActions::DestroySender);
         }
@@ -1144,7 +1141,7 @@ enum AppActions {
     RenderingProgressUpdate(f32),
 
     /// The rendering thread has completed and its receiver is destroyed. Consequently, the app's
-    /// sender is useless and should be destroyed as well. 
+    /// sender is useless and should be destroyed as well.
     DestroySender,
 }
 
@@ -1646,8 +1643,7 @@ fn is_time_even() -> bool {
 
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
-//TODO maybe start a parallel thread which calls a frame update every second when rendering 
-//TODO abort render button
+//TODO maybe start a parallel thread which calls a frame update every second when rendering
 //TODO new dedicated render button, for the second, etc render calls
 //TODO way to disable an object without actually deleting it
 impl eframe::App for App {
@@ -1939,5 +1935,10 @@ impl eframe::App for App {
                 }
             }
         }
+
+        //assert that at least once every second a frame is drawn
+        //a request repaint call is cleared as soon as a frame is drawn, meaning this line does 
+        // nothing as long as one continues moving their mouse
+        ctx.request_repaint_after_secs(1.0);
     }
 }
