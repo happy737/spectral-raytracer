@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod shader;
 mod custom_image;
 mod spectrum;
@@ -10,6 +12,7 @@ use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use std::sync::{mpsc, Arc, Mutex};
 use std::sync::atomic::AtomicU32;
+use std::sync::mpsc::Receiver;
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 use eframe::egui;
@@ -75,7 +78,9 @@ struct App {
     actions: Arc<Mutex<Vec<AppActions>>>,
     currently_rendering: Arc<Mutex<bool>>,
     rendering_since: Option<Instant>,
+    app_to_render_channel: Option<mpsc::Sender<AppToRenderMessages>>,
 }
+
 impl App {
     fn new() -> Self {
         Self {
@@ -85,6 +90,7 @@ impl App {
             actions: Arc::new(Mutex::new(Vec::new())),
             currently_rendering: Arc::new(Mutex::new(false)),
             rendering_since: None,
+            app_to_render_channel: None,
         }
     }
 
@@ -356,7 +362,7 @@ impl App {
     
     /// Shortcut function to display the settings for a single Object in the scene. The settings 
     /// can be changed and the updated values will be used in the rendering process. Each object is 
-    /// differentiated according to their type and the respective settings will be displayed. 
+    /// differentiated according to their type, and the respective settings will be displayed.
     fn display_objects_settings(&mut self, ui: &mut Ui, index: usize) {
         let object = &mut self.ui_values.ui_objects[index];
 
@@ -540,7 +546,7 @@ impl App {
                         final_nbr_of_samples -= 8;   //subtract 8
                     }
                 } else {
-                    final_nbr_of_samples = (*nbr_of_samples / 8 * 8).max(2)  //drop down to nearest multiple of 8, at least 2
+                    final_nbr_of_samples = (*nbr_of_samples / 8 * 8).max(2)  //drop down to the nearest multiple of 8, at least 2
                 }
             }
 
@@ -548,7 +554,7 @@ impl App {
                 if *nbr_of_samples % 8 == 0 {
                     final_nbr_of_samples += 8;   //add 8
                 } else {
-                    final_nbr_of_samples = (*nbr_of_samples / 8 + 1) * 8;    //go up to nearest multiple of 8
+                    final_nbr_of_samples = (*nbr_of_samples / 8 + 1) * 8;    //go up to the nearest multiple of 8
                 }
             }
 
@@ -902,6 +908,19 @@ impl App {
         self.update_all_spectrum_sample_sizes(self.ui_values.spectrum_number_of_samples)
     }
     
+    /// Generates a button to abort the current rendering process. The button is disabled when 
+    /// nothing is being rendered.
+    fn display_abort_button(&mut self, ui: &mut Ui) {
+        let enabled = self.app_to_render_channel.is_some();
+        let button = egui::Button::new("Abort")
+            .fill(Color32::LIGHT_RED);
+        if ui.add_enabled(enabled, button)
+            .on_hover_text(DISPLAY_ABORT_RENDERING_BUTTON_TOOLTIP).clicked() {
+                self.app_to_render_channel.as_mut().unwrap()
+                    .send(AppToRenderMessages::AbortRender).unwrap()
+        }
+    }
+    
     /// A single frame render process. Takes the uniforms and mixes the image into the 
     /// [CustomImage](custom_image::CustomImage) at the appropriate level. 
     fn apply_shader2(img: &mut custom_image::CustomImage, uniforms: Arc<RaytracingUniforms>, thread_pool: &ThreadPool) {
@@ -953,7 +972,7 @@ impl App {
     /// to be displayed to the user.
     fn render(mut image_float: custom_image::CustomImage, mut uniforms: RaytracingUniforms,
               thread_pool: ThreadPool, nbr_of_iterations: u32, rendering:  Arc<Mutex<bool>>,
-              action_list: Arc<Mutex<Vec<AppActions>>>) 
+              action_list: Arc<Mutex<Vec<AppActions>>>, receiver: Receiver<AppToRenderMessages>)
     {
         {   //letting the ui know the render process has begun
             let mut mutex_guard = rendering.lock().unwrap();
@@ -973,6 +992,18 @@ impl App {
                 action_list.push(AppActions::RenderingProgressUpdate((
                     frame_number + 1) as f32 / nbr_of_iterations as f32));
             }
+
+            //check if any messages have been passed back
+            match receiver.try_recv() {
+                Ok(message) => {
+                    match message {
+                        AppToRenderMessages::AbortRender => {
+                            break;  //simply jump out of loop to stop rendering
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
         }
 
         {   //letting the ui know the render process is finished
@@ -982,6 +1013,9 @@ impl App {
         {   //giving the ui the final rendering time in case it cannot compute it on its own
             let mut action_list = action_list.lock().unwrap();
             action_list.push(AppActions::TrueTimeUpdate(Instant::now() - begin_time));
+            
+            //telling the app to destroy its render sender
+            action_list.push(AppActions::DestroySender);
         }
     }
 
@@ -1029,11 +1063,14 @@ impl App {
         let nbr_of_iterations = self.ui_values.nbr_of_iterations;
         let rendering = self.currently_rendering.clone();
         let action_list = self.actions.clone();
+
+        let (sender, receiver) = mpsc::channel::<AppToRenderMessages>();
+        self.app_to_render_channel = Some(sender);
         
         self.ui_values.tab = UiTab::Display;
         
         thread::spawn(move || {
-            Self::render(image, uniforms, thread_pool, nbr_of_iterations, rendering, action_list);
+            Self::render(image, uniforms, thread_pool, nbr_of_iterations, rendering, action_list, receiver);
         });
     }
 
@@ -1105,6 +1142,10 @@ enum AppActions {
     /// The rendering thread has completed a step in rendering the image and now reports the 
     /// current progress amount until it is finished, to be displayed in a progressbar. 
     RenderingProgressUpdate(f32),
+
+    /// The rendering thread has completed and its receiver is destroyed. Consequently, the app's
+    /// sender is useless and should be destroyed as well. 
+    DestroySender,
 }
 
 /// This struct simply holds all values that will be mutated via the UI. It serves to differentiate 
@@ -1523,6 +1564,11 @@ enum AfterUIActions {
     DeselectSelectedSpectrum,
 }
 
+/// An enum to send messages from the UI thread over to the currently rendering thread.
+enum AppToRenderMessages {
+    AbortRender,
+}
+
 /// Takes 2 3-dimensional vectors and checks if they are linearly dependent (point in the same
 /// direction). This is done by checking if the cross product is (very close to) the 0 vector.
 fn are_linear_dependent(vec1: &Vector3<f32>, vec2: &Vector3<f32>) -> bool {
@@ -1808,6 +1854,7 @@ impl eframe::App for App {
                 UiTab::Display => {
                     //user information about rendering time
                     ui.horizontal_top(|ui| {
+                        self.display_abort_button(ui);
                         self.refresh_rendering_time();
                         self.display_frame_generation_time(ui);
                         egui::Frame::NONE.inner_margin(5.0).show(ui, |ui| {
@@ -1886,6 +1933,9 @@ impl eframe::App for App {
                 }
                 AppActions::RenderingProgressUpdate(progress) => {
                     self.ui_values.progress_bar_progress = progress;
+                }
+                AppActions::DestroySender => {
+                    self.app_to_render_channel = None;
                 }
             }
         }

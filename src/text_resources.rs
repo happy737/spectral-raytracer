@@ -64,7 +64,7 @@ pub const SPECTRUM_EFFECT_TYPE_TOOLTIP: &str = "The way the spectrum is intended
 pub const SPECTRUM_RADIANCE_TOOLTIP: &str = "The radiance of the spectrum. The higher the number, \
     the greater the energy that is emitted.";
 pub const SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP: &str = "Editing the wavelength is not \
-   yet supported. Currently, only the entire visible spectrum can be used";
+    yet supported. Currently, only the entire visible spectrum can be used";
 pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not allowed unless \
     their type has been changed to custom. After a spectrum is converted to custom, the number of \
     samples should no longer be changed.";
@@ -73,6 +73,8 @@ pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not
 pub const DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP: &str = "Cannot start rendering right \
     now. Maybe some lights or objects have illegal spectra assigned or you are already rendering \
     something?";
+pub const DISPLAY_ABORT_RENDERING_BUTTON_TOOLTIP: &str = "Aborts the current rendering process. \
+    The current frame will be finished, which may take a few more seconds.";
 
 //other stuff
 pub const EDIT_BUTTON_PENCIL_EMOJI: &str = "✏";
