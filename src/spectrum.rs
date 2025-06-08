@@ -20,10 +20,10 @@ const XYZ_TO_RGB_MATRIX: Matrix3<f32> = Matrix3::new(
 /// closest-hit-shader calculations. <br>
 /// Internally, the samples are stored in [SIMD facilitating structs](f32x8) which perform 
 /// calculations in tuples of 8. Sample sizes of multiple of 8s are therefore most cost-efficient. 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Spectrum {
     nbr_of_samples: usize,
-    intensities: Vec<f32x8>,
+    intensities: [f32; 128],
     spectrum_type: SpectrumType,    //currently useless, allows for distribution functions or similar to be used instead
 }
 impl Spectrum {
@@ -31,10 +31,10 @@ impl Spectrum {
     
     /// Creates a new Spectrum with the given field values. Essentially the short form of an 
     /// in-place creation. 
-    fn new(intensities: Vec<f32x8>, spectrum_type: SpectrumType, nbr_of_samples: usize) -> Self {
+    fn new(intensities: &[f32; 128], spectrum_type: SpectrumType, nbr_of_samples: usize) -> Self {
         Spectrum {
             nbr_of_samples, 
-            intensities,
+            intensities: *intensities,
             spectrum_type,
         }
     }
@@ -54,12 +54,10 @@ impl Spectrum {
     
     /// Creates a new Spectrum from a given list of intensities. Essentially allows custom 
     /// distributions to be submitted. 
-    pub fn new_from_list(intensities: &[f32], lowest_wavelength: f32, highest_wavelength: f32) -> Self {
-        let (len, vec) = Self::spectral_radiance_list_to_simd_list(intensities);
-        
+    pub fn new_from_list(intensities: &[f32; 128], lowest_wavelength: f32, highest_wavelength: f32) -> Self {
         Spectrum {
-            nbr_of_samples: len,
-            intensities: vec,
+            nbr_of_samples: 128,
+            intensities: *intensities,
             spectrum_type: SpectrumType::EquidistantSamples(lowest_wavelength, highest_wavelength),
         }
     }
@@ -86,7 +84,6 @@ impl Spectrum {
         Self::new_temperature_spectrum(
             lowest_wavelength,
             highest_wavelength,
-            nbr_of_samples,
             6500.0,
             multiplier,
         )
@@ -97,18 +94,19 @@ impl Spectrum {
     pub fn new_singular_reflectance_factor(lowest_wavelength: f32, highest_wavelength: f32, 
                                            nbr_of_samples: usize, reflectance_factor: f32) -> Self 
     {
-        let vec = vec![reflectance_factor; nbr_of_samples];
+        let arr = [reflectance_factor; 128];
         
-        Self::new_from_list(&vec, lowest_wavelength, highest_wavelength)
+        Self::new_from_list(&arr, lowest_wavelength, highest_wavelength)
     }
     
     
     /// Creates a new Spectrum from a given temperature. The spectrum is taken from the blackbody
     /// radiation spectrum of the given temperature and each sample is scaled by the provided 
     /// multiplier. 
-    pub fn new_temperature_spectrum(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, temp_in_kelvin: f32, multiplier: f32) -> Self {
-        let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
-        let mut wavelengths = Vec::with_capacity(nbr_of_samples);
+    //TODO this catastrophe is a candidate for rewriting when benchmark shows an improvement
+    pub fn new_temperature_spectrum(lowest_wavelength: f32, highest_wavelength: f32, temp_in_kelvin: f32, multiplier: f32) -> Self {
+        let step = (highest_wavelength - lowest_wavelength) / (128 - 1) as f32;
+        let mut wavelengths = Vec::with_capacity(128);
 
         let mut current = lowest_wavelength;
         while current <= highest_wavelength + step / 2.0 {  //adding half a step to ensure proper floating point accuracy
@@ -117,7 +115,7 @@ impl Spectrum {
             current += step;
         }
 
-        Self::new_from_list(&wavelengths, lowest_wavelength, highest_wavelength)
+        Self::new_from_list(<&[f32; 128]>::try_from(&wavelengths[..]).unwrap(), lowest_wavelength, highest_wavelength)
     }
 
     /// Takes a list of spectral radiance's and copies them into a Vector containing [f32x8]s which 
@@ -149,13 +147,11 @@ impl Spectrum {
     pub fn get_sample(&self, index: usize) -> Option<f32> {
         match self.spectrum_type {
             SpectrumType::EquidistantSamples(_, _) => {
-                if index >= self.nbr_of_samples {
+                if index >= 128 {
                     return None;
                 }
 
-                let simd = self.intensities[index / 8];
-                let arr: [f32; 8] = simd.into();
-                Some(arr[index % 8])
+                Some(self.intensities[index])
             }
         }
     }
@@ -188,9 +184,8 @@ impl Spectrum {
     /// Modifies the inner intensities to each be at least 0.0 via [fast_max](f32x8::fast_max). 
     /// Make sure none of the intensities are NaN. 
     pub fn max0(&mut self) {
-        let simd_zeroes = f32x8::from([0.0; 8]);
         for elem in self.intensities.iter_mut() {
-            *elem = elem.fast_max(simd_zeroes);
+            *elem = elem.max(0.0);
         }
     }
 
@@ -248,27 +243,29 @@ impl Spectrum {
     /// Modifies the existing Spectrum to be sampled with new_sample_amount. Does nothing if the 
     /// new amount is the same as the old one. 
     pub fn resample(&mut self, new_sample_amount: usize) {
-        assert!(new_sample_amount > 1);
+        //TODO reimplement
         
-        if new_sample_amount == self.nbr_of_samples {
-            return;
-        }
-        
-        let (lower_bound, upper_bound) = self.get_range();
-        let step = (upper_bound - lower_bound) / (new_sample_amount - 1) as f32;
-        
-        let mut samples = Vec::with_capacity(new_sample_amount);
-        
-        let mut current = lower_bound;
-        while current <= upper_bound {
-            samples.push(self.get_spectral_radiance_by_wavelength(current));
-            current += step;
-        }
-        
-        let (_, new_simd_vec) = Self::spectral_radiance_list_to_simd_list(&samples);
-        
-        self.nbr_of_samples = new_sample_amount;
-        self.intensities = new_simd_vec;
+        // assert!(new_sample_amount > 1);
+        // 
+        // if new_sample_amount == self.nbr_of_samples {
+        //     return;
+        // }
+        // 
+        // let (lower_bound, upper_bound) = self.get_range();
+        // let step = (upper_bound - lower_bound) / (new_sample_amount - 1) as f32;
+        // 
+        // let mut samples = Vec::with_capacity(new_sample_amount);
+        // 
+        // let mut current = lower_bound;
+        // while current <= upper_bound {
+        //     samples.push(self.get_spectral_radiance_by_wavelength(current));
+        //     current += step;
+        // }
+        // 
+        // let (_, new_simd_vec) = Self::spectral_radiance_list_to_simd_list(&samples);
+        // 
+        // self.nbr_of_samples = new_sample_amount;
+        // self.intensities = new_simd_vec;
     }
     
     /// Generates an Iterator which will yield tuples of wavelengths and their respective spectral 
@@ -319,15 +316,12 @@ impl Div<&Spectrum> for &Spectrum {
     type Output = Spectrum;
 
     fn div(self, rhs: &Spectrum) -> Self::Output {  //TODO this should be differentiated by spectrum_type (match ...)
-        assert_eq!(self.nbr_of_samples, rhs.nbr_of_samples);
-        
-        let mut vec = Vec::with_capacity(self.intensities.len());
-        for elem in self.intensities.iter().zip(rhs.intensities.iter()) {
-            let (lhs, rhs) = elem;
-            vec.push(*lhs / rhs);
+        let mut new_arr = self.intensities.clone();
+        for (elem, rhs_elem) in new_arr.iter_mut().zip(rhs.intensities.iter()) {
+            *elem /= rhs_elem;
         }
         
-        Spectrum::new(vec, self.spectrum_type, self.nbr_of_samples)
+        Spectrum::new(&new_arr, self.spectrum_type, self.nbr_of_samples)
     }
 }
 
@@ -335,21 +329,19 @@ impl Mul<&Spectrum> for &Spectrum {
     type Output = Spectrum;
     
     fn mul(self, rhs: &Spectrum) -> Self::Output {
-        assert_eq!(self.nbr_of_samples, rhs.nbr_of_samples);
-        
-        let mut vec = Vec::with_capacity(self.intensities.len());
-        for elem in self.intensities.iter().zip(rhs.intensities.iter()) {
-            let (lhs, rhs) = elem;
-            vec.push(*lhs * rhs);
+        let mut new_arr = self.intensities.clone();
+        for (elem, rhs_elem) in new_arr.iter_mut().zip(rhs.intensities.iter()) {
+            *elem *= rhs_elem;
         }
-        Spectrum::new(vec, self.spectrum_type, self.nbr_of_samples)
+        
+        Spectrum::new(&new_arr, self.spectrum_type, self.nbr_of_samples)
     }
 }
 
 impl MulAssign<f32> for Spectrum {
     fn mul_assign(&mut self, rhs: f32) {
         for elem in self.intensities.iter_mut() {
-            *elem = *elem * rhs;
+            *elem *= rhs;
         }
     }
 }
@@ -358,10 +350,11 @@ impl Div<f32> for &Spectrum {
     type Output = Spectrum;
     
     fn div(self, rhs: f32) -> Self::Output {
-        let vec = self.intensities.iter().map(|elem| {
-            *elem / rhs
-        }).collect::<Vec<f32x8>>();
-        Spectrum::new(vec, self.spectrum_type, self.nbr_of_samples)
+        let mut new_arr = self.intensities.clone();
+        for elem in new_arr.iter_mut() {
+            *elem = *elem / rhs;
+        }
+        Spectrum::new(&new_arr, self.spectrum_type, self.nbr_of_samples)
     }
 }
 
