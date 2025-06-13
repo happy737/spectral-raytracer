@@ -350,14 +350,27 @@ impl App {
             let selected_text = borrow.to_string();
             drop(borrow);
             
-            ComboBox::new(format!("light source {index} spectrum"), "")
-                .selected_text(selected_text)
-                .show_ui(ui, |ui| {
-                    for spectrum in &self.ui_values.spectra {
-                        ui.selectable_value(&mut light.spectrum, spectrum.clone(), spectrum.borrow().to_string());
-                    }
-                }).response.on_hover_text(LIGHT_SPECTRUM_TOOLTIP);
+            Self::display_combobox_with_spectrum_list(
+                &mut self.ui_values.spectra,
+                ui, 
+                format!("light source {index} spectrum"),
+                selected_text,
+                LIGHT_SPECTRUM_TOOLTIP,
+                &mut light.spectrum,
+            )
         });
+    }
+
+    /// Displays a [ComboBox] which lists all the available spectra. 
+    fn display_combobox_with_spectrum_list(spectra: &mut [Rc<RefCell<UISpectrum>>], ui: &mut Ui, id_salt: String,
+                                           selected_text: String, tool_tip: &str, current_spectrum: &mut Rc<RefCell<UISpectrum>>) {
+        ComboBox::new(id_salt, "")
+            .selected_text(selected_text)
+            .show_ui(ui, |ui| {
+                for spectrum in spectra {
+                    ui.selectable_value(current_spectrum, spectrum.clone(), spectrum.borrow().to_string());
+                }
+            }).response.on_hover_text(tool_tip);
     }
     
     /// Shortcut function to display the settings for a single Object in the scene. The settings 
@@ -510,13 +523,14 @@ impl App {
             let selected_text = borrow.to_string();
             drop(borrow);
 
-            ComboBox::new(format!("object reflecting {index} spectrum"), "")
-                .selected_text(selected_text)
-                .show_ui(ui, |ui| {
-                    for spectrum in &self.ui_values.spectra {
-                        ui.selectable_value(&mut object.spectrum, spectrum.clone(), spectrum.borrow().to_string());
-                    }
-                }).response.on_hover_text(OBJECT_SPECTRUM_REFLECTING_TOOLTIP);
+            Self::display_combobox_with_spectrum_list(
+                &mut self.ui_values.spectra,
+                ui,
+                format!("object reflecting {index} spectrum"),
+                selected_text,
+                OBJECT_SPECTRUM_REFLECTING_TOOLTIP,
+                &mut object.spectrum,
+            )
         });
     }
 
