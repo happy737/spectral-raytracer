@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -533,7 +533,8 @@ impl App {
 
             if nbr_of_samples_string.parse::<usize>().is_ok() {
                 let new_nbr_of_samples = nbr_of_samples_string.parse::<usize>().unwrap();
-                if new_nbr_of_samples > 1 {
+                if new_nbr_of_samples > 1 && new_nbr_of_samples <= spectrum::NBR_OF_SAMPLES_MAX 
+                        && new_nbr_of_samples % 8 == 0 {
                     final_nbr_of_samples = new_nbr_of_samples;
                 }
             }
@@ -541,12 +542,12 @@ impl App {
             if ui.button("-").clicked() {
                 if *nbr_of_samples % 8 == 0 {
                     if *nbr_of_samples == 8 {
-                        final_nbr_of_samples = 2;    //at least two samples have to be present
+                        final_nbr_of_samples = 8;    //at least 8 samples have to be present
                     } else {
                         final_nbr_of_samples -= 8;   //subtract 8
                     }
                 } else {
-                    final_nbr_of_samples = (*nbr_of_samples / 8 * 8).max(2)  //drop down to the nearest multiple of 8, at least 2
+                    final_nbr_of_samples = (*nbr_of_samples / 8 * 8).max(8)  //drop down to the nearest multiple of 8, at least 8
                 }
             }
 
@@ -558,7 +559,7 @@ impl App {
                 }
             }
 
-            if final_nbr_of_samples != *nbr_of_samples {
+            if final_nbr_of_samples != *nbr_of_samples && final_nbr_of_samples <= spectrum::NBR_OF_SAMPLES_MAX {
                 self.ui_values.spectrum_number_of_samples = final_nbr_of_samples;
                 self.update_all_spectrum_sample_sizes(final_nbr_of_samples);
             }
@@ -657,7 +658,7 @@ impl App {
                         let lower = self.ui_values.spectrum_lower_bound;
                         let upper = self.ui_values.spectrum_upper_bound;
                         let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
-                        ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lower, upper, temp, factor); 
+                        ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lower, upper, temp, nbr_of_samples, factor); 
                     }
                 }
                 self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
@@ -722,107 +723,109 @@ impl App {
     /// Displays the right side of spectrum settings. Here the user can preview the color of
     /// the spectrum and each samples individual value.
     fn display_spectrum_right_side(&mut self, ui: &mut Ui) {
-        todo!();
-        // match self.ui_values.selected_spectrum.as_mut() {
-        //     Some(selected) => {
-        //         let spectrum = Spectrum::new_from_list(&selected.spectrum_values, selected.lower_bound, selected.upper_bound);
-        //         let (r, g, b) = spectrum.to_rgb_early();
-        // 
-        //         ui.horizontal_top(|ui| {
-        //             ui.colored_label(Color32::RED, "Any changes will not be applied unless saved. Selecting another spectrum will discard changes!");
-        //             if ui.button("Save").clicked() {
-        //                 self.ui_values.after_ui_action = Some(AfterUIActions::SaveSelectedSpectrum(selected.selected_spectrum));
-        //             }
-        //         });
-        // 
-        //         match selected.spectrum_effect_type {
-        //             SpectrumEffectType::Emissive => {
-        //                 //color squares
-        //                 ui.horizontal_top(|ui| {
-        //                     //observed color
-        //                     ui.vertical(|ui| {
-        //                         let r_byte = (r.clamp(0.0, 1.0) * 255.0) as u8;
-        //                         let g_byte = (g.clamp(0.0, 1.0) * 255.0) as u8;
-        //                         let b_byte = (b.clamp(0.0, 1.0) * 255.0) as u8;
-        //                         let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        //                         let contrasting_text_color = if luminance < 0.5 { Color32::WHITE } else {Color32::BLACK};
-        // 
-        //                         egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
-        //                             .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
-        //                             .show(ui, |ui| {
-        //                                 ui.set_max_size(Vec2::new(200.0, 100.0));
-        //                                 ui.centered_and_justified(|ui| {
-        //                                     ui.colored_label(contrasting_text_color, format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
-        //                                 });
-        //                             }).response.on_hover_text(OBSERVED_COLOR_TOOLTIP);
-        //                         ui.label("Observed Color").on_hover_text(OBSERVED_COLOR_TOOLTIP);
-        //                     });
-        // 
-        //                     //normalized color
-        //                     ui.vertical(|ui| {
-        //                         let max = r.max(g.max(b));
-        //                         let r_byte= (r / max * 255.0 + 0.5) as u8;
-        //                         let g_byte= (g / max * 255.0 + 0.5) as u8;
-        //                         let b_byte= (b / max * 255.0 + 0.5) as u8;
-        // 
-        //                         egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
-        //                             .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
-        //                             .show(ui, |ui| {
-        //                                 ui.set_max_size(Vec2::new(200.0, 100.0));
-        //                                 ui.centered_and_justified(|ui| {
-        //                                     ui.label(format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
-        //                                 });
-        //                             }).response.on_hover_text(NORMALIZED_COLOR_TOOLTIP);
-        //                         ui.label("Normalized Color").on_hover_text(NORMALIZED_COLOR_TOOLTIP);
-        //                     });
-        //                 });
-        //             }
-        //             SpectrumEffectType::Reflective => {
-        //                 //no color squares
-        //                 ui.label("Color Preview not (yet) available for reflective spectra.");
-        //             }
-        //         }
-        //         ui.add_space(5.0);
-        //         
-        //         //radiance
-        //         if selected.spectrum_effect_type != SpectrumEffectType::Reflective {
-        //             ui.horizontal_top(|ui| {
-        //                 ui.label(format!("Radiance of the spectrum: {}W/sr/m^2",
-        //                                  spectrum.get_radiance()))
-        //                     .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
-        //             });
-        //             ui.add_space(5.0);
-        //         }
-        // 
-        //         //samples
-        //         let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
-        //         let slider_max = match selected.spectrum_effect_type {
-        //             SpectrumEffectType::Emissive => {selected.max * 2.0},
-        //             SpectrumEffectType::Reflective => 1.0,
-        //         };
-        //         let unit_label = if selected.spectrum_effect_type == SpectrumEffectType::Emissive 
-        //             {"W/sr/m^2/nm"} else {""};
-        //         egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
-        //             for ((wavelength, _), spectral_radiance) in spectrum.iter().zip(selected.spectrum_values.iter_mut()) {
-        //                 //TODO make multiple sliders adjustable
-        //                 ui.horizontal_top(|ui| {
-        //                     ui.label(format!("{wavelength:.2}nm:"));
-        //                     ui.style_mut().spacing.slider_width = 300.0;
-        //                     ui.add_enabled(
-        //                         editable,
-        //                         egui::Slider::new(spectral_radiance, 0.0..=slider_max)
-        //                             .fixed_decimals(3)
-        //                             .step_by(0.001)
-        //                     ).on_disabled_hover_text(SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP);
-        //                     ui.label(unit_label);
-        //                 });
-        //             }
-        //         });
-        //     }
-        //     None => {
-        //         ui.label("Select a spectrum on the left to start editing...");
-        //     }
-        // }
+        match self.ui_values.selected_spectrum.as_mut() {
+            Some(selected) => {
+                //todo!();
+                let spectrum = &mut selected.spectrum;
+                let (r, g, b) = spectrum.to_rgb_early();
+                
+                ui.horizontal_top(|ui| {
+                    ui.colored_label(Color32::RED, "Any changes will not be applied unless saved. Selecting another spectrum will discard changes!");
+                    if ui.button("Save").clicked() {
+                        self.ui_values.after_ui_action = Some(AfterUIActions::SaveSelectedSpectrum(selected.selected_spectrum));
+                    }
+                });
+                
+                match selected.spectrum_effect_type {
+                    SpectrumEffectType::Emissive => {
+                        //color squares
+                        ui.horizontal_top(|ui| {
+                            //observed color
+                            ui.vertical(|ui| {
+                                let r_byte = (r.clamp(0.0, 1.0) * 255.0) as u8;
+                                let g_byte = (g.clamp(0.0, 1.0) * 255.0) as u8;
+                                let b_byte = (b.clamp(0.0, 1.0) * 255.0) as u8;
+                                let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                                let contrasting_text_color = if luminance < 0.5 { Color32::WHITE } else {Color32::BLACK};
+                
+                                egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
+                                    .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
+                                    .show(ui, |ui| {
+                                        ui.set_max_size(Vec2::new(200.0, 100.0));
+                                        ui.centered_and_justified(|ui| {
+                                            ui.colored_label(contrasting_text_color, format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
+                                        });
+                                    }).response.on_hover_text(OBSERVED_COLOR_TOOLTIP);
+                                ui.label("Observed Color").on_hover_text(OBSERVED_COLOR_TOOLTIP);
+                            });
+                
+                            //normalized color
+                            ui.vertical(|ui| {
+                                let max = r.max(g.max(b));
+                                let r_byte= (r / max * 255.0 + 0.5) as u8;
+                                let g_byte= (g / max * 255.0 + 0.5) as u8;
+                                let b_byte= (b / max * 255.0 + 0.5) as u8;
+                
+                                egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
+                                    .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
+                                    .show(ui, |ui| {
+                                        ui.set_max_size(Vec2::new(200.0, 100.0));
+                                        ui.centered_and_justified(|ui| {
+                                            ui.label(format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
+                                        });
+                                    }).response.on_hover_text(NORMALIZED_COLOR_TOOLTIP);
+                                ui.label("Normalized Color").on_hover_text(NORMALIZED_COLOR_TOOLTIP);
+                            });
+                        });
+                    }
+                    SpectrumEffectType::Reflective => {
+                        //no color squares
+                        ui.label("Color Preview not (yet) available for reflective spectra.");
+                    }
+                }
+                ui.add_space(5.0);
+                
+                //radiance
+                if selected.spectrum_effect_type != SpectrumEffectType::Reflective {
+                    ui.horizontal_top(|ui| {
+                        ui.label(format!("Radiance of the spectrum: {}W/sr/m^2",
+                                         spectrum.get_radiance()))
+                            .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
+                    });
+                    ui.add_space(5.0);
+                }
+                
+                //samples
+                let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
+                let slider_max = match selected.spectrum_effect_type {
+                    SpectrumEffectType::Emissive => {selected.max * 2.0},
+                    SpectrumEffectType::Reflective => 1.0,
+                };
+                let unit_label = if selected.spectrum_effect_type == SpectrumEffectType::Emissive 
+                    {"W/sr/m^2/nm"} else {""};
+                egui::ScrollArea::vertical().id_salt("right scroll area").show(ui, |ui| {
+                    for (wavelength, spectral_radiance) in 
+                            spectrum.get_wavelengths().iter().zip(spectrum.get_intensities_slice().iter_mut()) {
+                        
+                        //TODO make multiple sliders adjustable
+                        ui.horizontal_top(|ui| {
+                            ui.label(format!("{wavelength:.2}nm:"));
+                            ui.style_mut().spacing.slider_width = 300.0;
+                            ui.add_enabled(
+                                editable,
+                                egui::Slider::new(spectral_radiance, 0.0..=slider_max)
+                                    .fixed_decimals(3)
+                                    .step_by(0.001)
+                            ).on_disabled_hover_text(SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP);
+                            ui.label(unit_label);
+                        });
+                    }
+                });
+            }
+            None => {
+                ui.label("Select a spectrum on the left to start editing...");
+            }
+        }
 
     }
 
@@ -848,15 +851,12 @@ impl App {
         let ui_spectrum = self.ui_values.spectra[index].borrow();
         let working_vec: Vec<f32> = ui_spectrum.spectrum.iter().map(|(_, value)| value).collect();
         let max = working_vec.iter().fold(f32::NEG_INFINITY, |acc, elem| acc.max(*elem));
-        let (lower, upper) = ui_spectrum.spectrum.get_range();
 
         let ui_selected_spectrum = UISelectedSpectrum {
             selected_spectrum: index,
             max,
-            spectrum_values: working_vec,
+            spectrum: ui_spectrum.spectrum,
             spectrum_effect_type: ui_spectrum.spectrum_effect_type,
-            lower_bound: lower,
-            upper_bound: upper,
             ui_spectrum_type: ui_spectrum.spectrum_type,
         };
         self.ui_values.selected_spectrum = Some(ui_selected_spectrum);
@@ -896,11 +896,17 @@ impl App {
                     ui_spectrum.spectrum = Spectrum::new_singular_reflectance_factor(lowest, highest, nbr_of_samples, factor);
                 }
                 UISpectrumType::Temperature(temp, factor) => { 
-                    ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lowest, highest, temp, factor);
+                    ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lowest, highest, temp, nbr_of_samples, factor);
                 }
             }
         }
-        self.ui_values.after_ui_action = Some(AfterUIActions::DeselectSelectedSpectrum);
+        
+        if let Some(selected) = self.ui_values.selected_spectrum.as_ref() {
+            let index = selected.selected_spectrum;
+            self.update_selected_spectrum(index);
+            self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
+        }
+        //self.ui_values.after_ui_action = Some(AfterUIActions::DeselectSelectedSpectrum);
     }
 
     /// Updates all spectra. Currently, this simply calls [App::update_all_spectrum_sample_sizes].
@@ -1282,10 +1288,8 @@ impl Default for UIFields {
 struct UISelectedSpectrum {
     pub selected_spectrum: usize,
     pub max: f32,
-    pub spectrum_values: Vec<f32>,
+    pub spectrum: Spectrum,
     pub spectrum_effect_type: SpectrumEffectType,
-    pub lower_bound: f32,
-    pub upper_bound: f32,
     pub ui_spectrum_type: UISpectrumType,
 }
 
@@ -1315,9 +1319,7 @@ impl UISpectrum {
 
     /// Updates the UISpectrum. Overwrites the attached spectrum with the changes made by the user.
     pub fn edit(&mut self, update: &UISelectedSpectrum) {
-        todo!();
-        // let spectrum = Spectrum::new_from_list(&update.spectrum_values, update.lower_bound, update.upper_bound);
-        // self.spectrum = spectrum;
+        self.spectrum = update.spectrum;
     }
 }
 

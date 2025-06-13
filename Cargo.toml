@@ -1,6 +1,6 @@
 [package]
 name = "eframe_raytracing"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -12,4 +12,3 @@ image = "0.25.5"
 rfd = "0.15.2"
 threadpool = "1.8.1"
 nalgebra = "0.33.2"
-wide = "0.7.32"

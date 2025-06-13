@@ -62,7 +62,9 @@ pub const SPECTRUM_EFFECT_TYPE_TOOLTIP: &str = "The way the spectrum is intended
     that is reflected. Under white light, a reflecting spectrum with only 0.5 as its values will \
     appear as a medium gray. Reflection values must be in range [0; 1].";
 pub const SPECTRUM_RADIANCE_TOOLTIP: &str = "The radiance of the spectrum. The higher the number, \
-    the greater the energy that is emitted.";
+    the greater the energy that is emitted. Can be thought of as the apparent brightness of the \
+    spectrum. Note however that smaller wavelengths carry more energy, thereby skewing the numbers \
+    a bit.";
 pub const SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP: &str = "Editing the wavelength is not \
     yet supported. Currently, only the entire visible spectrum can be used";
 pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not allowed unless \
