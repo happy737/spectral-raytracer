@@ -487,7 +487,6 @@ fn collapse_list_to_half(list: &[f32]) -> Vec<f32> {
 
 /// Reduces a slice to a new list of target length where target length is in range 
 /// [original_len/2; original_len\]. Each value in the new list is linearly interpolated.
-//TODO this is fucked. Re-evaluate range
 fn linear_interpolate_halved(original_values: &[f32], target_length: usize) -> Vec<f32> {
     let original_length = original_values.len();
     assert!(original_length > 1);

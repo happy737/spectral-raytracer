@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -739,7 +739,6 @@ impl App {
     fn display_spectrum_right_side(&mut self, ui: &mut Ui) {
         match self.ui_values.selected_spectrum.as_mut() {
             Some(selected) => {
-                //todo!();
                 let spectrum = &mut selected.spectrum;
                 let (r, g, b) = spectrum.to_rgb_early();
                 
@@ -1128,19 +1127,18 @@ impl App {
     /// Checks if all values about to be passed to the renderer are in order. This function should
     /// return false if an error exists which will make the renderer crash. 
     fn check_render_legality(&self) -> bool {
-        true
-        // let lights_ok = self.check_lights_legality();    //TODO re-enable checks
-        // 
-        // let objects_ok = self.check_objects_legality();
-        // 
-        // let ui_sample_nbr = self.ui_values.spectrum_number_of_samples;
-        // let spectra_ok = self.ui_values.spectra.iter()
-        //     .map(|s| s.borrow().spectrum.get_nbr_of_samples() == ui_sample_nbr)
-        //     .all(|b| b);
-        // 
-        // let not_currently_rendering = !*self.currently_rendering.lock().unwrap();
-        // 
-        // lights_ok && objects_ok && spectra_ok && not_currently_rendering
+        let lights_ok = self.check_lights_legality();
+
+        let objects_ok = self.check_objects_legality();
+
+        let ui_sample_nbr = self.ui_values.spectrum_number_of_samples;
+        let spectra_ok = self.ui_values.spectra.iter()
+            .map(|s| s.borrow().spectrum.get_nbr_of_samples() == ui_sample_nbr)
+            .all(|b| b);
+
+        let not_currently_rendering = !*self.currently_rendering.lock().unwrap();
+
+        lights_ok && objects_ok && spectra_ok && not_currently_rendering
     }
 
     /// Checks if all [UILights](UILight) are in order. Returns false if the rendering process
@@ -1674,7 +1672,6 @@ fn is_time_even() -> bool {
 
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
-//TODO new dedicated render button, for the second, etc render calls
 //TODO way to disable an object without actually deleting it
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
