@@ -77,6 +77,9 @@ pub const DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP: &str = "Cannot start 
     something?";
 pub const DISPLAY_ABORT_RENDERING_BUTTON_TOOLTIP: &str = "Aborts the current rendering process. \
     The current frame will be finished, which may take a few more seconds.";
+pub const DISPLAY_IMAGE_TOOLTIP: &str = "Hold and drag the image to move it. Alternatively, use \
+    the mouse scroll wheel to move up and down. Hold down [shift] and scroll to move left and \
+    right. Hold down [ctrl] and scroll to zoom in and out.";
 
 //other stuff
 pub const EDIT_BUTTON_PENCIL_EMOJI: &str = "✏";

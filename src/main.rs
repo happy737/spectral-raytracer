@@ -1197,6 +1197,7 @@ struct UIFields {
     spectrum_upper_bound: f32,
     spectrum_number_of_samples: usize,
     selected_spectrum: Option<UISelectedSpectrum>,
+    image_scene_rect: egui::emath::Rect,
 }
 impl Default for UIFields {
     fn default() -> Self {
@@ -1293,6 +1294,7 @@ impl Default for UIFields {
             spectrum_upper_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             spectrum_number_of_samples: NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             selected_spectrum: None,
+            image_scene_rect: egui::emath::Rect::ZERO,
         }
     }
 }
@@ -1883,10 +1885,22 @@ impl eframe::App for App {
                     //image display frame
                     egui::Frame::NONE.fill(Color32::GRAY).show(ui, |ui| {
                         if let Some(ref img) = self.image_eframe_texture {
-                            egui::ScrollArea::both().show(ui, |ui| {
+                            let window_dimensions = ctx.input(|i| i.viewport().outer_rect).unwrap();
+                            let x_ratio = window_dimensions.width() / self.ui_values.width as f32;
+                            let y_ratio = window_dimensions.height() / self.ui_values.height as f32;
+                            let lower_zoom_end = x_ratio.min(y_ratio).min(1.0);
+                            let upper_zoom_end = 10.0;
+
+                            egui::Scene::new()
+                                    .zoom_range(lower_zoom_end..=upper_zoom_end)
+                                    .show(ui, &mut self.ui_values.image_scene_rect, |ui| {
                                 ui.add(
                                     egui::Image::from_texture(img).fit_to_original_size(1.0)
-                                );
+                                ).on_hover_text(DISPLAY_IMAGE_TOOLTIP);
+                            }).response.context_menu(|ui| {
+                                if ui.button("Return to the image").clicked() {
+                                    self.ui_values.image_scene_rect = egui::Rect::ZERO;
+                                }
                             });
                         } else {
                             ui.centered_and_justified(|ui| {
