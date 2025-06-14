@@ -91,3 +91,6 @@ pub const DISPLAY_IMAGE_TOOLTIP: &str = "Hold and drag the image to move it. Alt
 //other stuff
 pub const EDIT_BUTTON_PENCIL_EMOJI: &str = "✏";
 pub const EDIT_BUTTON_TOOLTIP: &str = "Change the name of this element.";
+pub const HELP_MENU_LABEL: &str = "For a simple tutorial, see the README.md file. For explanations \
+    what the different settings do, hover over them for a short period of time to see their \
+    tooltips.";

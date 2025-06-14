@@ -1707,6 +1707,9 @@ impl eframe::App for App {
                         self.ui_values = UIFields::default();
                     }
                 });
+                ui.menu_button("Help", |ui| {
+                    ui.label(HELP_MENU_LABEL);
+                })
             });
         });
         
