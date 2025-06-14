@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -811,7 +811,7 @@ impl App {
                 //samples
                 let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
                 let slider_max = match selected.spectrum_effect_type {
-                    SpectrumEffectType::Emissive => {selected.max * 2.0},
+                    SpectrumEffectType::Emissive => {(selected.max * 2.0).max(0.01)},
                     SpectrumEffectType::Reflective => 1.0,
                 };
                 let unit_label = if selected.spectrum_effect_type == SpectrumEffectType::Emissive 
