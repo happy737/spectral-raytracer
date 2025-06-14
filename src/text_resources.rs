@@ -35,6 +35,11 @@ pub const LIGHT_SPECTRUM_TOOLTIP: &str = "The spectrum emitted by this light sou
 pub const OBJECT_SPECTRUM_REFLECTING_TOOLTIP: &str = "The spectrum reflected by the object. Each \
     sample value is the share of this wavelength that is reflected. A spectrum of only 1 will \
     fully reflect every wavelength, essentially a perfectly white body.";
+pub const OBJECT_TYPE_PLAIN_BOX_TOOLTIP: &str = "The simplest shape, a simple box. This box can be \
+    stretched and moved. It can, however, not be rotated, it is always axis-aligned. This shape is \
+    the fastest to compute.";
+pub const OBJECT_TYPE_SPHERE_TOOLTIP: &str = "A perfect sphere. Only its position and radius can \
+    be adjusted.";
 
 
 //spectra and materials
@@ -71,6 +76,7 @@ pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not
     their type has been changed to custom. After a spectrum is converted to custom, the number of \
     samples should no longer be changed.";
 
+
 //display
 pub const DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP: &str = "Cannot start rendering right \
     now. Maybe some lights or objects have illegal spectra assigned or you are already rendering \
@@ -80,6 +86,7 @@ pub const DISPLAY_ABORT_RENDERING_BUTTON_TOOLTIP: &str = "Aborts the current ren
 pub const DISPLAY_IMAGE_TOOLTIP: &str = "Hold and drag the image to move it. Alternatively, use \
     the mouse scroll wheel to move up and down. Hold down [shift] and scroll to move left and \
     right. Hold down [ctrl] and scroll to zoom in and out.";
+
 
 //other stuff
 pub const EDIT_BUTTON_PENCIL_EMOJI: &str = "✏";

@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -406,8 +406,8 @@ impl App {
             ComboBox::new(index, "Type")
                 .selected_text(format!("{}", selected))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut selected, Type::PlainBox, "Plain Box");
-                    ui.selectable_value(&mut selected, Type::Sphere, "Sphere");
+                    ui.selectable_value(&mut selected, Type::PlainBox, "Plain Box").on_hover_text(OBJECT_TYPE_PLAIN_BOX_TOOLTIP);
+                    ui.selectable_value(&mut selected, Type::Sphere, "Sphere").on_hover_text(OBJECT_TYPE_SPHERE_TOOLTIP);
                 }).response.on_hover_text(OBJECT_TYPE_TOOLTIP);
             let same = selected == match object.ui_object_type {
                 UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
