@@ -40,6 +40,12 @@ pub const OBJECT_TYPE_PLAIN_BOX_TOOLTIP: &str = "The simplest shape, a simple bo
     the fastest to compute.";
 pub const OBJECT_TYPE_SPHERE_TOOLTIP: &str = "A perfect sphere. Only its position and radius can \
     be adjusted.";
+pub const OBJECT_TYPE_ROTATED_BOX_TOOLTIP: &str = "A box that can be rotated as well as stretched \
+    and moved. It is more expensive to compute than the plain box.";
+pub const OBJECT_ROTATED_BOX_DIMENSIONS_TOOLTIP: &str = "The width, height and depth of a rotated \
+    box. Important: The dimensions are defined on a non-rotated box, only after will it be rotated.";
+pub const OBJECT_ROTATED_BOX_ANGLES_TOOLTIP: &str = "The rotation angles around the X, Y and Z \
+    axis. The angles are in radians. The three angles are treated as euler-angles.";
 
 
 //spectra and materials

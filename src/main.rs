@@ -376,6 +376,7 @@ impl App {
     /// Shortcut function to display the settings for a single Object in the scene. The settings 
     /// can be changed and the updated values will be used in the rendering process. Each object is 
     /// differentiated according to their type, and the respective settings will be displayed.
+    ///TODO the type changing logic in this function is a mess. 
     fn display_objects_settings(&mut self, ui: &mut Ui, index: usize) {
         let object = &mut self.ui_values.ui_objects[index];
 
@@ -389,12 +390,14 @@ impl App {
             enum Type {
                 PlainBox,
                 Sphere,
+                RotatedBox,
             }
             impl Display for Type {
                 fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
                     let s = match self {
                         Type::PlainBox => "PlainBox",
                         Type::Sphere => "Sphere",
+                        Type::RotatedBox => "RotatedBox",
                     };
                     write!(f, "{s}")
                 }
@@ -402,21 +405,25 @@ impl App {
             let mut selected = match object.ui_object_type {
                 UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
                 UIObjectType::Sphere(_) => Type::Sphere,
+                UIObjectType::RotatedBox(_, _, _, _, _, _) => Type::RotatedBox,
             };
             ComboBox::new(index, "Type")
                 .selected_text(format!("{}", selected))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut selected, Type::PlainBox, "Plain Box").on_hover_text(OBJECT_TYPE_PLAIN_BOX_TOOLTIP);
                     ui.selectable_value(&mut selected, Type::Sphere, "Sphere").on_hover_text(OBJECT_TYPE_SPHERE_TOOLTIP);
+                    ui.selectable_value(&mut selected, Type::RotatedBox, "Rotated Box").on_hover_text(OBJECT_TYPE_ROTATED_BOX_TOOLTIP);
                 }).response.on_hover_text(OBJECT_TYPE_TOOLTIP);
             let same = selected == match object.ui_object_type {
                 UIObjectType::PlainBox(_, _, _) => Type::PlainBox,
                 UIObjectType::Sphere(_) => Type::Sphere,
+                UIObjectType::RotatedBox(_, _, _, _, _, _) => Type::RotatedBox,
             };
             if !same {
                 object.ui_object_type = match selected {
                     Type::PlainBox => UIObjectType::default_plain_box(),
                     Type::Sphere => UIObjectType::default_sphere(),
+                    Type::RotatedBox => UIObjectType::default_rotated_box(),
                 }
             }
             ui.add_space(30.0);
@@ -507,6 +514,75 @@ impl App {
                         }
                     }
                 });
+            }
+            UIObjectType::RotatedBox(x_length, y_length, z_length, 
+                                     x_rotation, y_rotation, z_rotation) => {
+                //dimensions
+                ui.horizontal_top(|ui| {
+                    let mut dim_x_string = x_length.to_string();
+                    let mut dim_y_string = y_length.to_string();
+                    let mut dim_z_string = z_length.to_string();
+                    ui.label("Object Dimensions: (x:").on_hover_text(OBJECT_ROTATED_BOX_DIMENSIONS_TOOLTIP);
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dim_x_string));
+                    ui.label("y:");
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dim_y_string));
+                    ui.label("z:");
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut dim_z_string));
+                    ui.label(")");
+
+                    if dim_x_string.parse::<f32>().is_ok() {
+                        let new_length_x = dim_x_string.parse::<f32>().unwrap();
+                        if new_length_x > 0.0 && new_length_x != x_length {
+                            object.ui_object_type = UIObjectType::RotatedBox(new_length_x, y_length, z_length, x_rotation, y_rotation, z_rotation);
+                        }
+                    }
+                    if dim_y_string.parse::<f32>().is_ok() {
+                        let new_length_y = dim_y_string.parse::<f32>().unwrap();
+                        if new_length_y > 0.0 && new_length_y != y_length {
+                            object.ui_object_type = UIObjectType::RotatedBox(x_length, new_length_y, z_length, x_rotation, y_rotation, z_rotation);
+                        }
+                    }
+                    if dim_z_string.parse::<f32>().is_ok() {
+                        let new_length_z = dim_z_string.parse::<f32>().unwrap();
+                        if new_length_z > 0.0 && new_length_z != z_length {
+                            object.ui_object_type = UIObjectType::RotatedBox(x_length, y_length, new_length_z, x_rotation, y_rotation, z_rotation);
+                        }
+                    }
+                });
+                
+                //rotation
+                ui.horizontal_top(|ui| {
+                    let mut rot_x_string = x_rotation.to_string();
+                    let mut rot_y_string = y_rotation.to_string();
+                    let mut rot_z_string = z_rotation.to_string();
+                    ui.label("Object Rotation: (x:").on_hover_text(OBJECT_ROTATED_BOX_ANGLES_TOOLTIP);
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut rot_x_string));
+                    ui.label("y:");
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut rot_y_string));
+                    ui.label("z:");
+                    ui.add_sized([80.0, 18.0], TextEdit::singleline(&mut rot_z_string));
+                    ui.label(")");
+
+                    if rot_x_string.parse::<f32>().is_ok() {
+                        let new_rotation_x = rot_x_string.parse::<f32>().unwrap();
+                        if new_rotation_x != x_rotation {
+                            object.ui_object_type = UIObjectType::RotatedBox(x_length, y_length, z_length, new_rotation_x, y_rotation, z_rotation);
+                        }
+                    }
+                    if rot_y_string.parse::<f32>().is_ok() {
+                        let new_rotation_y = rot_y_string.parse::<f32>().unwrap();
+                        if new_rotation_y != y_rotation {
+                            object.ui_object_type = UIObjectType::RotatedBox(x_length, y_length, z_length, x_rotation, new_rotation_y, z_rotation);
+                        }
+                    }
+                    if rot_z_string.parse::<f32>().is_ok() {
+                        let new_rotation_z = rot_z_string.parse::<f32>().unwrap();
+                        if new_rotation_z != z_rotation {
+                            object.ui_object_type = UIObjectType::RotatedBox(x_length, y_length, z_length, x_rotation, y_rotation, new_rotation_z);
+                        }
+                    }
+                });
+                //todo!()
             }
         }
 
@@ -1550,6 +1626,7 @@ impl Display for UIObject {
         let s = match self.ui_object_type {
             UIObjectType::PlainBox(_, _, _) => "Plain Box",
             UIObjectType::Sphere(_) => "Sphere",
+            UIObjectType::RotatedBox(_, _, _, _, _, _) => "Rotated Box",
         };
         write!(f, "{}", s)
     }
@@ -1560,6 +1637,9 @@ impl Display for UIObject {
 enum UIObjectType {
     PlainBox(f32, f32, f32),
     Sphere(f32),
+    ///The first three are its stretchedness towards the three principle axes, the other three 
+    /// values are its rotation about the three axes. 
+    RotatedBox(f32, f32, f32, f32, f32, f32),
 }
 
 impl UIObjectType {
@@ -1569,6 +1649,10 @@ impl UIObjectType {
     
     fn default_sphere() -> Self {
         UIObjectType::Sphere(1.0)
+    }
+    
+    fn default_rotated_box() -> Self {
+        UIObjectType::RotatedBox(2.0, 2.0, 2.0, 0.0, 0.0, 0.0)
     }
 }
 

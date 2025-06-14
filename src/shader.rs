@@ -1,13 +1,12 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
-use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Vector3};
+use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Rotation3, Vector3};
 use crate::{UICamera, UILight, UIObject, UIObjectType};
 use crate::spectrum::Spectrum;
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_MAX_BOUNCES: u32 = 30;
 const NEW_RAY_POSITION_OFFSET_DISTANCE: f32 = 0.00001;
-const HAMMERSLEY_OFFSET_SCALE: f32 = 0.001;
 
 /// The position of the pixel on the screen. (0, 0) is the top left. 
 #[derive(Copy, Clone)]
@@ -94,7 +93,7 @@ pub(crate) struct Aabb {
     min: Point3<f32>,
     max: Point3<f32>,
     aabb_type: AABBType,
-    spectrum: Spectrum,
+    reflective_spectrum: Spectrum,
     metallicness: bool,  //TODO remake as f32, but now only totally diffuse or totally metallic
 }   //TODO refactor material info into single struct "material"
 impl Aabb {
@@ -103,7 +102,7 @@ impl Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
             max: point![center.x + radius, center.y + radius, center.z + radius],
             aabb_type: AABBType::Sphere,
-            spectrum,
+            reflective_spectrum: spectrum,
             metallicness,
         }
     }
@@ -116,7 +115,42 @@ impl Aabb {
             min: point![center.x - x_half, center.y - y_half, center.z - z_half],
             max: point![center.x + x_half, center.y + y_half, center.z + z_half],
             aabb_type: AABBType::PlainBox,
-            spectrum,
+            reflective_spectrum: spectrum,
+            metallicness,
+        }
+    }
+    
+    pub fn new_rotated_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, rotation: Rotation3<f32>, reflective_spectrum: Spectrum, metallicness: bool) -> Aabb {
+        let x_half = x_length / 2.0;
+        let y_half = y_length / 2.0;
+        let z_half = z_length / 2.0;
+        
+        //calculate the 8 points of the cube
+        let point_mmm = center + rotation * vector![-x_half, -y_half, -z_half];
+        let point_mmp = center + rotation * vector![-x_half, -y_half, z_half];
+        let point_mpm = center + rotation * vector![-x_half, y_half, -z_half];
+        let point_mpp = center + rotation * vector![-x_half, y_half, z_half];
+        let point_pmm = center + rotation * vector![x_half, -y_half, -z_half];
+        let point_pmp = center + rotation * vector![x_half, -y_half, z_half];
+        let point_ppm = center + rotation * vector![x_half, y_half, -z_half];
+        let point_ppp = center + rotation * vector![x_half, y_half, z_half];
+        
+        //get the minimum and maximum values for each component
+        let x_min = point_mmm.x.min(point_mmp.x).min(point_mpm.x).min(point_mpp.x).min(point_pmm.x).min(point_pmp.x).min(point_ppm.x).min(point_ppp.x);
+        let x_max = point_mmm.x.max(point_mmp.x).max(point_mpm.x).max(point_mpp.x).max(point_pmm.x).max(point_pmp.x).max(point_ppm.x).max(point_ppp.x);
+        let y_min = point_mmm.y.min(point_mmp.y).min(point_mpm.y).min(point_mpp.y).min(point_pmm.y).min(point_pmp.y).min(point_ppm.y).min(point_ppp.y);
+        let y_max = point_mmm.y.max(point_mmp.y).max(point_mpm.y).max(point_mpp.y).max(point_pmm.y).max(point_pmp.y).max(point_ppm.y).max(point_ppp.y);
+        let z_min = point_mmm.z.min(point_mmp.z).min(point_mpm.z).min(point_mpp.z).min(point_pmm.z).min(point_pmp.z).min(point_ppm.z).min(point_ppp.z);
+        let z_max = point_mmm.z.max(point_mmp.z).max(point_mpm.z).max(point_mpp.z).max(point_pmm.z).max(point_pmp.z).max(point_ppm.z).max(point_ppp.z);
+        
+        let min = point![x_min, y_min, z_min];
+        let max = point![x_max, y_max, z_max];
+
+        Aabb {
+            min, 
+            max,
+            aabb_type: AABBType::RotatedBox(*center, vector![x_length, y_length, z_length], rotation),
+            reflective_spectrum,
             metallicness,
         }
     }
@@ -124,6 +158,7 @@ impl Aabb {
 enum AABBType {
     PlainBox,
     Sphere,
+    RotatedBox(Point3<f32>, Vector3<f32>, Rotation3<f32>),
 }
 
 impl From<&UIObject> for Aabb {
@@ -131,10 +166,15 @@ impl From<&UIObject> for Aabb {
         let pos = point![value.pos_x, value.pos_y, value.pos_z];
         match value.ui_object_type {
             UIObjectType::PlainBox(x_length, y_length, z_length) => {
-                Aabb::new_box(&pos, x_length, y_length, z_length, value.spectrum.borrow().spectrum.clone(), value.metallicness)
+                Aabb::new_box(&pos, x_length, y_length, z_length, value.spectrum.borrow().spectrum, value.metallicness)
             }
             UIObjectType::Sphere(radius) => {
-                Aabb::new_sphere(&pos, radius, value.spectrum.borrow().spectrum.clone(), value.metallicness)
+                Aabb::new_sphere(&pos, radius, value.spectrum.borrow().spectrum, value.metallicness)
+            }
+            UIObjectType::RotatedBox(x_length, y_length, z_length, x_rotation, y_rotation, z_rotation) => {
+                let rotation = Rotation3::from_euler_angles(x_rotation, y_rotation, z_rotation);
+                
+                Aabb::new_rotated_box(&pos, x_length, y_length, z_length, rotation, value.spectrum.borrow().spectrum, value.metallicness)
             }
         }
     }
@@ -156,7 +196,7 @@ impl Light {
 impl From<&UILight> for Light {
     fn from(value: &UILight) -> Self {
         Light::new(point![value.pos_x, value.pos_y, value.pos_z], 
-                   value.spectrum.borrow().spectrum.clone())
+                   value.spectrum.borrow().spectrum)
     }
 }
 
@@ -260,13 +300,30 @@ fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
             }
         }
         AABBType::PlainBox => {
-            let (t1, t2) = ray_aabb_intersection(ray, &aabb.min, &aabb.max).unwrap();
+            let (t1, t2) = ray_aabb_intersection(&ray.origin, &ray.direction, &aabb.min, &aabb.max).unwrap();
             //at least one value is guaranteed to be positive
             let min = t1.min(t2);
             if min >= 0.0 {
                 Some(min)
             } else {
                 Some(t1.max(t2))
+            }
+            //no None since ray_aabb already hit and this is the same once again
+        }
+        AABBType::RotatedBox(pos, dim, rotation) => {
+            if let Some((t1, t2)) = ray_oriented_box_intersection(&ray.origin, &ray.direction, &pos, &dim, &rotation) {
+                let min = t1.min(t2);
+                let max = t1.max(t2);
+                
+                if min >= 0.0 {
+                    Some(min)
+                } else if max >= 0.0 {
+                    Some(max)
+                } else {
+                    None
+                }
+            } else {
+                None
             }
         }
     }
@@ -286,6 +343,9 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
             let sphere_pos = (aabb.min + aabb.max.coords) * 0.5;
             //let radius = aabb.max.x - sphere_pos.x;
             (intersection_point - sphere_pos).normalize()
+        }
+        AABBType::RotatedBox(pos, dim, rotation) => {
+            rotated_box_normal_calculation(&pos, &dim, &rotation, &intersection_point)
         }
     };
 
@@ -349,7 +409,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         }
     }
     
-    ray.spectrum = &aabb.spectrum * &received_spectrum;
+    ray.spectrum = &aabb.reflective_spectrum * &received_spectrum;
 }
 
 /// https://www.gsn-lib.org/apps/raytracing/index.php?name=example_emissivesphere
@@ -379,7 +439,7 @@ fn submit_ray(ray: &mut Ray, uniforms: &RaytracingUniforms) {
     let mut intersections: Vec<(&Aabb, f32)> = Vec::new();
     
     for aabb in uniforms.aabbs.iter() {
-        if let Some((_t_min, _t_max)) = ray_aabb_intersection(ray, &aabb.min, &aabb.max) {
+        if let Some((_t_min, _t_max)) = ray_aabb_intersection(&ray.origin, &ray.direction, &aabb.min, &aabb.max) {
             if let Some(t) = intersection_shader(ray, aabb) {
                 if t > 0.0 {
                     intersections.push((aabb, t));
@@ -436,14 +496,15 @@ fn ray_sphere_intersection(ray: &Ray, sphere_pos: &Point3<f32>, sphere_rad: f32)
     }
 }
 
-fn ray_aabb_intersection(ray: &Ray, point_min: &Point3<f32>, point_max: &Point3<f32>) -> Option<(f32, f32)> {
+fn ray_aabb_intersection(ray_origin: &Point3<f32>, ray_direction: &Vector3<f32>, 
+                         point_min: &Point3<f32>, point_max: &Point3<f32>) -> Option<(f32, f32)> {
     let mut t_min = f32::NEG_INFINITY;
     let mut t_max = f32::INFINITY;
     
     for i in 0..3 {
-        let inverse_direction = 1.0 / ray.direction[i];
-        let t1 = (point_min[i] - ray.origin[i]) * inverse_direction;
-        let t2 = (point_max[i] - ray.origin[i]) * inverse_direction;
+        let inverse_direction = 1.0 / ray_direction[i];
+        let t1 = (point_min[i] - ray_origin[i]) * inverse_direction;
+        let t2 = (point_max[i] - ray_origin[i]) * inverse_direction;
 
         let (t_near, t_far) = if inverse_direction < 0.0 { (t2, t1) } else { (t1, t2) };
         
@@ -460,6 +521,27 @@ fn ray_aabb_intersection(ray: &Ray, point_min: &Point3<f32>, point_max: &Point3<
     }
     
     Some((t_min, t_max)) 
+}
+
+fn ray_oriented_box_intersection(ray_origin: &Point3<f32>, ray_direction: &Vector3<f32>, position: &Point3<f32>,
+                                 dimensions: &Vector3<f32>, rotation: &Rotation3<f32>, ) -> Option<(f32, f32)> {
+    //build the box's world-to-local transform
+    //first translate to origin, then apply inverse rotation
+    let inv_rotation = rotation.inverse();  //TODO this inversion might be fished out
+    let local_ray_origin = inv_rotation * (ray_origin - position);
+    let local_ray_direction = inv_rotation * ray_direction;
+
+    let half_dims = *dimensions * 0.5;
+    let point_min = Point3::from(-half_dims);
+    let point_max = Point3::from(half_dims);
+
+    //reuse existing AABB intersection
+    ray_aabb_intersection(
+        &local_ray_origin.into(), 
+        &local_ray_direction,
+        &point_min,
+        &point_max,
+    )
 }
 
 fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Const<3>>) -> OMatrix<f32, Const<3>, Const<1>> {
@@ -485,6 +567,50 @@ fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Con
         0.0
     };
     vector![x, y, z].normalize()
+}
+
+pub fn rotated_box_normal_calculation(pos: &Point3<f32>, dim: &Vector3<f32>, rotation: &Rotation3<f32>,
+                                      intersection_point: &Point3<f32>) -> Vector3<f32> {
+    let inv_rotation = rotation.inverse();
+
+    //transform hit point into box local space
+    let local_point = inv_rotation * (intersection_point - pos);
+
+    let half_dim = *dim * 0.5;
+
+    //compute distances to faces
+    let distance_x = (half_dim.x - local_point.x).abs();
+    let distance_y = (half_dim.y - local_point.y).abs();
+    let distance_z = (half_dim.z - local_point.z).abs();
+
+    let distance_x_negative = (-half_dim.x - local_point.x).abs();
+    let distance_y_negative = (-half_dim.y - local_point.y).abs();
+    let distance_z_negative = (-half_dim.z - local_point.z).abs();
+
+    //find closest face
+    let (mut min_dist, mut normal_local) = (distance_x, Vector3::x_axis().into_inner());
+    if distance_x_negative < min_dist {
+        min_dist = distance_x_negative;
+        normal_local = *-Vector3::x_axis();
+    }
+    if distance_y < min_dist {
+        min_dist = distance_y;
+        normal_local = *Vector3::y_axis();
+    }
+    if distance_y_negative < min_dist {
+        min_dist = distance_y_negative;
+        normal_local = *-Vector3::y_axis();
+    }
+    if distance_z < min_dist {
+        min_dist = distance_z;
+        normal_local = *Vector3::z_axis();
+    }
+    if distance_z_negative < min_dist {
+        normal_local = *-Vector3::z_axis();
+    }
+
+    // Transform normal back to world space
+    rotation * normal_local
 }
 
 // from http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
