@@ -46,7 +46,7 @@ fn main() -> eframe::Result {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
 
-    //Set up the window which will open
+    //Set up the window which will be opened
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             //.with_inner_size([1280.0, 720.0])

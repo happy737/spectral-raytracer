@@ -291,7 +291,7 @@ impl Spectrum {
 }
 
 impl AddAssign<&Spectrum> for Spectrum {
-    fn add_assign(&mut self, rhs: &Spectrum) {
+    fn add_assign(&mut self, rhs: &Spectrum) {  //TODO using assert_unchecked for arithmetic saves about 2%
         assert_eq!(self.nbr_of_samples, rhs.nbr_of_samples);
         assert_eq!(self.nbr_of_samples % 8, 0);
 

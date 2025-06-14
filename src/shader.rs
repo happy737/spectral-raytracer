@@ -322,14 +322,10 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                 let mut adjusted = &light.spectrum / direction.magnitude_squared();
                 
                 //adjust for incoming ray angle
-                adjusted *= shadow_ray.direction.normalize().dot(&normal)
-                    //.clamp(0.0, f32::INFINITY);
-                    .max(0.0);
+                adjusted *= shadow_ray.direction.normalize().dot(&normal).max(0.0);
                 
                 //adjust for outgoing ray angle
-                adjusted *= (-ray.direction).dot(&normal)
-                    //.clamp(0.0, f32::INFINITY);
-                    .max(0.0);
+                adjusted *= (-ray.direction).dot(&normal).max(0.0);
                 
                 received_spectrum += &adjusted;
             }
@@ -343,7 +339,6 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
             let phi = 2.0 * PI * random_y;
             let local_direction = vector![theta.sin() * phi.cos(), theta.sin() * phi.sin(), theta.cos()];
             let new_direction = get_normal_space2(&normal) * local_direction;
-            //let new_direction = random_bounce_from_normal(&normal, random_x, random_y);
             let mut new_ray = Ray::new(intersection_point, new_direction,
                                    ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);
             submit_ray(&mut new_ray, uniforms);
