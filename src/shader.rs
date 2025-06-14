@@ -214,8 +214,8 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let (pixel_offset_x, pixel_offset_y) = 
         hammersley(uniforms.frame_id, uniforms.intended_frames_amount);
     
-    let y = -((y / height) * 2.0 - 1.0) + pixel_offset_x * HAMMERSLEY_OFFSET_SCALE; //TODO this can be calculated smarter than a constant
-    let x = ((x / width) * 2.0 - 1.0) * aspect_ratio + pixel_offset_y * HAMMERSLEY_OFFSET_SCALE;
+    let y = -(((y + pixel_offset_y) / height) * 2.0 - 1.0);
+    let x = (((x + pixel_offset_x) / width) * 2.0 - 1.0) * aspect_ratio;
     
     let up = uniforms.camera.up.normalize();
     let forward = uniforms.camera.direction.normalize();
@@ -499,6 +499,12 @@ fn radical_inverse(mut bits: u32) -> f32 {
     (bits as f32) * 2.328_306_4e-10  // / 0x100000000
 }
 
+/// A hammersley sequence. Takes two numbers where the first should be strictly smaller than the 
+/// second. Use it f.ex. this way: <br>
+/// ```let (x, y) = hammersley(current_frame, total_number_of_frames);```<br>
+/// For capital_n = 10 the sequence looks like this: <br><br>
+/// (0.05, 0.5), (0.15, 0.25), (0.25, 0.75), (0.35, 0.125), (0.45, 0.625), (0.55, 0.375)
+/// (0.65, 0.875), (0.75, 0.0625), (0.85, 0.5625), (0.95, 0.3125)
 fn hammersley(n: u32, capital_n: u32) -> (f32, f32) {
     (
         (n as f32 + 0.5) / capital_n as f32,
