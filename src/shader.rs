@@ -5,7 +5,6 @@ use crate::{UICamera, UILight, UIObject, UIObjectType};
 use crate::spectrum::Spectrum;
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
-const NEW_RAY_MAX_BOUNCES: u32 = 30;
 const NEW_RAY_POSITION_OFFSET_DISTANCE: f32 = 0.00001;
 
 /// The position of the pixel on the screen. (0, 0) is the top left. 
@@ -31,6 +30,7 @@ pub struct RaytracingUniforms {
     pub(crate) frame_id: u32,
     pub(crate) intended_frames_amount: u32,
     pub(crate) example_spectrum: Spectrum,
+    pub(crate) max_bounces: u32,
 }
 
 /// The struct representing the ray that is shot through the scene. It contains information about
@@ -264,7 +264,7 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let dir = forward * focal_distance - right * x + true_up * y;   //no idea why the - but it works correct this way
     let dir = dir.normalize();
 
-    let mut ray = Ray::new(uniforms.camera.position, dir, NEW_RAY_MAX_BOUNCES, pos, &uniforms.example_spectrum);
+    let mut ray = Ray::new(uniforms.camera.position, dir, uniforms.max_bounces, pos, &uniforms.example_spectrum);
     submit_ray(&mut ray, uniforms);
 
     ray.spectrum.to_rgb_early()

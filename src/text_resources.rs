@@ -9,6 +9,9 @@ pub const NUMBER_OF_ITERATIONS_TOOLTIP: &str  = "The number of frames generated 
     image. Higher numbers take proportionally more time to render, but reduce the noise in the \
     image, as well as make the lighting more correct. For decent results, use numbers greater than \
     100. For good results, greater than 1000.";
+pub const MAX_BOUNCES_TOOLTIP: &str = "The maximum number of bounces a ray will make. Lower \
+    numbers mean better performance, but light will spread less and the image will look darker. \
+    Use 30 as a default.";
 
 
 // objects

@@ -120,6 +120,36 @@ impl Spectrum {
         Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
     }
     
+    //TODO 
+    pub fn new_reflective_spectrum_red(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
+        let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
+        let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
+        
+        for i in 0..nbr_of_samples {
+            let current_wavelength = lowest_wavelength + step * i as f32;
+            if 550.0 < current_wavelength {
+                arr[i] = factor;
+            }
+        }
+        
+        Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
+    }
+    
+    //TODO 
+    pub fn new_reflective_spectrum_green(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
+        let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
+        let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
+        
+        for i in 0..nbr_of_samples {
+            let current_wavelength = lowest_wavelength + step * i as f32;
+            if 500.0 < current_wavelength && current_wavelength < 575.0 {
+                arr[i] = factor;
+            }
+        }
+        
+        Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
+    }
+    
     /// Returns the spectral radiance at the given wavelength. If no sample exists for the precise 
     /// value, the spectral radiance is linearly interpolated from the two nearest samples. If the 
     /// wavelength is outside the spectrum range, 0 is returned. 

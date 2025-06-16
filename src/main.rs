@@ -30,6 +30,8 @@ const NBR_OF_THREADS_DEFAULT: usize = 20;
 const NBR_OF_THREADS_MAX: usize = 64;
 const NBR_OF_ITERATIONS_DEFAULT: u32 = 100;
 const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 32;
+const NEW_RAY_MAX_BOUNCES_DEFAULT: u32 = 30;
+const NEW_RAY_MAX_BOUNCES_MAX: u32 = 100;
 
 static COUNTER: AtomicU32 = AtomicU32::new(1);
 fn get_id() -> u32 { COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed) }
@@ -192,6 +194,21 @@ impl App {
                 }
                 if ui.button(" + ").clicked() {
                     self.ui_values.nbr_of_threads += 1;
+                }
+            });
+        });
+    }
+    
+    fn display_max_bounces_edit_field(&mut self, ui: &mut Ui) {
+        ui.vertical_centered(|ui| {
+            ui.horizontal_top(|ui| {
+                ui.label("Max bounces per ray:").on_hover_text(MAX_BOUNCES_TOOLTIP);
+                ui.add(egui::Slider::new(&mut self.ui_values.nbr_of_ray_bounces, 1..=NEW_RAY_MAX_BOUNCES_MAX));
+                if ui.button(" - ").clicked() {
+                    self.ui_values.nbr_of_ray_bounces -= 1;
+                }
+                if ui.button(" + ").clicked() {
+                    self.ui_values.nbr_of_ray_bounces += 1;
                 }
             });
         });
@@ -750,6 +767,18 @@ impl App {
                         let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
                         ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lower, upper, temp, nbr_of_samples, factor); 
                     }
+                    UISpectrumType::ReflectiveRed(factor) => {
+                        let lower = self.ui_values.spectrum_lower_bound;
+                        let upper = self.ui_values.spectrum_upper_bound;
+                        let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
+                        ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_red(lower, upper, nbr_of_samples, factor);
+                    }
+                    UISpectrumType::ReflectiveGreen(factor) => {
+                        let lower = self.ui_values.spectrum_lower_bound;
+                        let upper = self.ui_values.spectrum_upper_bound;
+                        let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
+                        ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_green(lower, upper, nbr_of_samples, factor);
+                    }
                 }
                 self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
             }
@@ -799,6 +828,12 @@ impl App {
 
                 //factor
                 changed = display_factor(ui, factor) || changed;
+            }
+            UISpectrumType::ReflectiveRed(factor) => {
+                todo!()
+            }
+            UISpectrumType::ReflectiveGreen(factor) => {
+                todo!()
             }
             UISpectrumType::Custom => {}
         }
@@ -987,6 +1022,12 @@ impl App {
                 UISpectrumType::Temperature(temp, factor) => { 
                     ui_spectrum.spectrum = Spectrum::new_temperature_spectrum(lowest, highest, temp, nbr_of_samples, factor);
                 }
+                UISpectrumType::ReflectiveRed(factor) => {
+                    ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_red(lowest, highest, nbr_of_samples, factor);
+                }
+                UISpectrumType::ReflectiveGreen(factor) => {
+                    ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_green(lowest, highest, nbr_of_samples, factor);
+                }
             }
         }
         
@@ -1154,6 +1195,7 @@ impl App {
             frame_id: 0,
             intended_frames_amount: self.ui_values.nbr_of_iterations,
             example_spectrum,
+            max_bounces: self.ui_values.nbr_of_ray_bounces,
         };
         
         //input validation
@@ -1262,6 +1304,7 @@ struct UIFields {
     frame_gen_time: Option<Duration>,
     nbr_of_iterations: u32,
     nbr_of_threads: usize,
+    nbr_of_ray_bounces: u32,
     tab: UiTab,
     after_ui_action: Option<AfterUIActions>,
     ui_camera: UICamera,
@@ -1275,6 +1318,93 @@ struct UIFields {
     selected_spectrum: Option<UISelectedSpectrum>,
     image_scene_rect: egui::emath::Rect,
 }
+
+impl UIFields {
+    fn cornell_box(&mut self) {
+        let spectrum = Spectrum::new_sunlight_spectrum(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            self.spectrum_number_of_samples,
+            0.0001,
+        );
+        let ui_spectrum = UISpectrum::new(
+            "Solar light spectrum".to_string(),
+            UISpectrumType::Solar(0.0001),
+            SpectrumEffectType::Emissive,
+            spectrum,
+        );
+        let rc_ui_spectrum = Rc::from(RefCell::from(ui_spectrum));
+
+        let ui_lights = vec![
+            UILight::new(0.0, 0.9, 0.0, rc_ui_spectrum.clone(), "Top light".to_string()),
+        ];
+
+        let spectrum_reflective_grey = Spectrum::new_singular_reflectance_factor(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            self.spectrum_number_of_samples,
+            0.7,
+        );
+        let ui_spectrum_reflective_grey = UISpectrum::new(
+            "Reflective gray".to_string(),
+            UISpectrumType::PlainReflective(0.7),
+            SpectrumEffectType::Reflective,
+            spectrum_reflective_grey,
+        );
+        let rc_ui_spectrum_reflective_grey = Rc::from(RefCell::from(ui_spectrum_reflective_grey));
+
+        let spectrum_reflective_red = Spectrum::new_reflective_spectrum_red(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            self.spectrum_number_of_samples,
+            1.0,
+        );
+        let ui_spectrum_reflective_red = UISpectrum::new(
+            "Reflective red".to_string(),
+            UISpectrumType::ReflectiveRed(1.0),
+            SpectrumEffectType::Reflective,
+            spectrum_reflective_red,
+        );
+        let rc_ui_spectrum_reflective_red = Rc::from(RefCell::from(ui_spectrum_reflective_red));
+
+        let spectrum_reflective_green = Spectrum::new_reflective_spectrum_green(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            self.spectrum_number_of_samples,
+            1.0,
+        );
+        let ui_spectrum_reflective_green = UISpectrum::new(
+            "Reflective green".to_string(),
+            UISpectrumType::ReflectiveGreen(1.0),
+            SpectrumEffectType::Reflective,
+            spectrum_reflective_green,
+        );
+        let rc_ui_spectrum_reflective_green = Rc::from(RefCell::from(ui_spectrum_reflective_green));
+
+        let ui_objects = vec![
+            UIObject::new(0.0, 0.0, 2.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central box".to_string()),
+            UIObject::new(0.0, 2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Top box".to_string()),
+            UIObject::new(0.0, -2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Bottom box".to_string()),
+            UIObject::new(-2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left box".to_string()),
+            UIObject::new(2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right box".to_string()),
+            //TODO
+        ];
+
+        let spectra = vec![
+            rc_ui_spectrum,
+
+            rc_ui_spectrum_reflective_grey,
+            rc_ui_spectrum_reflective_red,
+            rc_ui_spectrum_reflective_green,
+        ];
+
+        self.ui_lights = ui_lights;
+        self.ui_objects = ui_objects;
+        self.spectra = spectra;
+        self.ui_camera = UICamera::default();
+    }
+}
+
 impl Default for UIFields {
     fn default() -> Self {
         let sun10 = Spectrum::new_sunlight_spectrum(
@@ -1359,6 +1489,7 @@ impl Default for UIFields {
             frame_gen_time: None,
             nbr_of_iterations: NBR_OF_ITERATIONS_DEFAULT,
             nbr_of_threads: determine_optimal_thread_count(),
+            nbr_of_ray_bounces: NEW_RAY_MAX_BOUNCES_DEFAULT,
             tab: UiTab::Settings,
             after_ui_action: None,
             ui_camera: UICamera::default(),
@@ -1470,6 +1601,8 @@ enum UISpectrumType {
     PlainReflective(f32),   //parameter = factor 0-1
     ///Parameter 0 = temp in Kelvin, parameter 1 = factor
     Temperature(f32, f32),  //parameter 0 = temp in Kelvin, parameter 1 = factor
+    ReflectiveRed(f32),
+    ReflectiveGreen(f32),
 }
 
 impl Display for UISpectrumType {
@@ -1479,6 +1612,8 @@ impl Display for UISpectrumType {
             UISpectrumType::Solar(_) => write!(f, "Solar spectrum"),
             UISpectrumType::PlainReflective(_) => write!(f, "All the same"),
             UISpectrumType::Temperature(_, _) => write!(f, "Temperature"),
+            UISpectrumType::ReflectiveRed(_) => write!(f, "Reflective red"),
+            UISpectrumType::ReflectiveGreen(_) => write!(f, "Reflective green"),
         }
     }
 }
@@ -1790,6 +1925,9 @@ impl eframe::App for App {
                     if ui.button("Reset Settings to default").clicked() {
                         self.ui_values = UIFields::default();
                     }
+                    if ui.button("Cornell Box Preset").clicked() {
+                        self.ui_values.cornell_box();
+                    }
                 });
                 ui.menu_button("Help", |ui| {
                     ui.label(HELP_MENU_LABEL);
@@ -1839,6 +1977,7 @@ impl eframe::App for App {
                     self.display_height_text_edit_field(ui);
                     self.display_nbr_of_threads_edit_field(ui);
                     self.display_nbr_of_iterations_edit_field(ui);
+                    self.display_max_bounces_edit_field(ui);
                 }
                 UiTab::Objects => {
                     egui::ScrollArea::vertical().show(ui, |ui| {
