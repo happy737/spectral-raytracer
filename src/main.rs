@@ -198,7 +198,7 @@ impl App {
             });
         });
     }
-    
+
     fn display_max_bounces_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal_top(|ui| {
@@ -829,11 +829,9 @@ impl App {
                 //factor
                 changed = display_factor(ui, factor) || changed;
             }
-            UISpectrumType::ReflectiveRed(factor) => {
-                todo!()
-            }
-            UISpectrumType::ReflectiveGreen(factor) => {
-                todo!()
+            UISpectrumType::ReflectiveRed(factor) | UISpectrumType::ReflectiveGreen(factor) => {
+                //factor
+                changed = display_factor(ui, factor);
             }
             UISpectrumType::Custom => {}
         }
