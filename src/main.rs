@@ -1914,6 +1914,32 @@ fn is_time_even() -> bool {
     std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() % 2 == 0
 }
 
+/// Takes a list of [AppActions] and removes all but the last [AppActions::FrameUpdate]. Having 
+/// multiple frame updates will result in wasted work since all previous frames will be overwritten 
+/// by the most recent frame update. 
+fn reduce_action_list(action_list: &mut Vec<AppActions>) {
+    let mut nbr_of_frame_updates = 0;
+    
+    for action in action_list.iter() {
+        if let AppActions::FrameUpdate(_) = action {
+            nbr_of_frame_updates += 1;
+        }
+    }
+    
+    if nbr_of_frame_updates > 1 {
+        let mut found_last = false;
+        for i in (0..action_list.len()).rev() {
+            if let AppActions::FrameUpdate(_) = action_list[i] {
+                if !found_last {
+                    found_last = true;
+                } else {
+                    action_list.remove(i);   
+                }
+            }
+        }
+    }
+}
+
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
 //TODO way to disable an object without actually deleting it
@@ -2194,13 +2220,16 @@ impl eframe::App for App {
             }
         }
         
+        
         //Other frames may have finished work
-        let mut actions_list = self.actions.lock().unwrap();
-        let mut separate_action_list = Vec::new();
-        while actions_list.len() > 0 {
-            separate_action_list.push(actions_list.remove(0));
+        let mut separate_action_list;
+        {   //block to drop the action list mutex guard
+            let mut actions_list = self.actions.lock().unwrap();
+            separate_action_list = std::mem::take(&mut *actions_list);
         }
-        drop(actions_list);
+
+        //multiple frame updates will result in only the last one being relevant, previous are new removed
+        reduce_action_list(&mut separate_action_list);
         
         for action in separate_action_list {
             match action {
