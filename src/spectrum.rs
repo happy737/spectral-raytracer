@@ -120,7 +120,8 @@ impl Spectrum {
         Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
     }
     
-    //TODO 
+    /// Generates a reflective spectrum which is the given factor for wavelengths greater than 
+    /// 550 nm. This is approximately the range where primarily red cones respond. 
     pub fn new_reflective_spectrum_red(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
         let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
         let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
@@ -135,7 +136,8 @@ impl Spectrum {
         Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
     }
     
-    //TODO 
+    /// Generates a reflective spectrum which is the given factor for wavelengths between 500 nm and
+    /// 575 nm. This is approximately the range where primarily green cones respond. 
     pub fn new_reflective_spectrum_green(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
         let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
         let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
@@ -143,6 +145,22 @@ impl Spectrum {
         for i in 0..nbr_of_samples {
             let current_wavelength = lowest_wavelength + step * i as f32;
             if 500.0 < current_wavelength && current_wavelength < 575.0 {
+                arr[i] = factor;
+            }
+        }
+        
+        Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
+    }
+    
+    /// Generates a reflective spectrum which is the given factor for wavelengths below 475 nm. 
+    /// This is approximately the range where primarily blue cones respond. 
+    pub fn new_reflective_spectrum_blue(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
+        let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
+        let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
+        
+        for i in 0..nbr_of_samples {
+            let current_wavelength = lowest_wavelength + step * i as f32;
+            if current_wavelength < 475.0 {
                 arr[i] = factor;
             }
         }

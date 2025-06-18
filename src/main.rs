@@ -199,6 +199,8 @@ impl App {
         });
     }
 
+    /// Displays the settings for maximum recursion depth of new rays in a horizontally aligned
+    /// manner.
     fn display_max_bounces_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal_top(|ui| {
@@ -742,6 +744,9 @@ impl App {
                     ui.selectable_value(&mut selected_type, UISpectrumType::Solar(1.0), format!("{}", UISpectrumType::Solar(1.0)));
                     ui.selectable_value(&mut selected_type, UISpectrumType::PlainReflective(1.0), format!("{}", UISpectrumType::PlainReflective(1.0)));
                     ui.selectable_value(&mut selected_type, UISpectrumType::Temperature(1000.0, 1.0), format!("{}", UISpectrumType::Temperature(1.0, 1.0)));
+                    ui.selectable_value(&mut selected_type, UISpectrumType::ReflectiveRed(1.0), format!("{}", UISpectrumType::ReflectiveRed(1.0)));
+                    ui.selectable_value(&mut selected_type, UISpectrumType::ReflectiveGreen(1.0), format!("{}", UISpectrumType::ReflectiveGreen(1.0)));
+                    ui.selectable_value(&mut selected_type, UISpectrumType::ReflectiveBlue(1.0), format!("{}", UISpectrumType::ReflectiveBlue(1.0)));
                 }).response.on_hover_text(SPECTRUM_TYPE_TOOLTIP);
             
             if selected_type != ui_spectrum.spectrum_type {
@@ -777,6 +782,12 @@ impl App {
                         let upper = self.ui_values.spectrum_upper_bound;
                         let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
                         ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_green(lower, upper, nbr_of_samples, factor);
+                    }
+                    UISpectrumType::ReflectiveBlue(factor) => {
+                        let lower = self.ui_values.spectrum_lower_bound;
+                        let upper = self.ui_values.spectrum_upper_bound;
+                        let nbr_of_samples = self.ui_values.spectrum_number_of_samples;
+                        ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_blue(lower, upper, nbr_of_samples, factor);
                     }
                 }
                 self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
@@ -828,7 +839,9 @@ impl App {
                 //factor
                 changed = display_factor(ui, factor) || changed;
             }
-            UISpectrumType::ReflectiveRed(factor) | UISpectrumType::ReflectiveGreen(factor) => {
+            UISpectrumType::ReflectiveRed(factor) | 
+            UISpectrumType::ReflectiveGreen(factor) | 
+            UISpectrumType::ReflectiveBlue(factor) => {
                 //factor
                 changed = display_factor(ui, factor);
             }
@@ -1024,6 +1037,9 @@ impl App {
                 }
                 UISpectrumType::ReflectiveGreen(factor) => {
                     ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_green(lowest, highest, nbr_of_samples, factor);
+                }
+                UISpectrumType::ReflectiveBlue(factor) => {
+                    ui_spectrum.spectrum = Spectrum::new_reflective_spectrum_blue(lowest, highest, nbr_of_samples, factor);
                 }
             }
         }
@@ -1263,7 +1279,9 @@ impl App {
             .map(|l| self.ui_values.spectra.contains(&l.spectrum))
             .all(|b| b)
     }
-    
+
+    /// Checks if all [UIObjects](UIObject) are in order. Returns false if the rendering process
+    /// would fail.
     fn check_objects_legality(&self) -> bool {
         self.ui_values.ui_objects.iter()
             .map(|o| self.ui_values.spectra.contains(&o.spectrum))
@@ -1379,11 +1397,13 @@ impl UIFields {
         let rc_ui_spectrum_reflective_green = Rc::from(RefCell::from(ui_spectrum_reflective_green));
 
         let ui_objects = vec![
-            UIObject::new(0.0, 0.0, 2.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central box".to_string()),
-            UIObject::new(0.0, 2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Top box".to_string()),
-            UIObject::new(0.0, -2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Bottom box".to_string()),
-            UIObject::new(-2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left box".to_string()),
-            UIObject::new(2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right box".to_string()),
+            UIObject::new(0.0, 0.0, 2.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central wall".to_string()),
+            UIObject::new(0.0, 2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Ceiling".to_string()),
+            UIObject::new(0.0, -2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Floor".to_string()),
+            UIObject::new(-2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left wall".to_string()),
+            UIObject::new(2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right wall".to_string()),
+            UIObject::new(0.5, -0.75, -0.5, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 0.5, 0.5, 0.0, 1.0, 0.0), "Right front box".to_string()),
+            UIObject::new(-0.5, -0.4, 0.5, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 1.2, 0.5, 0.0, -0.5, 0.0), "Left back box".to_string()),
             //TODO
         ];
 
@@ -1503,6 +1523,9 @@ impl Default for UIFields {
     }
 }
 
+/// A struct dedicated to holding the currently selected spectrum. This struct allows for quick 
+/// access to individual spectrum values and the spectrum itself to display each wavelength 
+/// value and the final colors. 
 struct UISelectedSpectrum {
     pub selected_spectrum: usize,
     pub max: f32,
@@ -1600,6 +1623,7 @@ enum UISpectrumType {
     Temperature(f32, f32),  //parameter 0 = temp in Kelvin, parameter 1 = factor
     ReflectiveRed(f32),
     ReflectiveGreen(f32),
+    ReflectiveBlue(f32),
 }
 
 impl Display for UISpectrumType {
@@ -1611,6 +1635,7 @@ impl Display for UISpectrumType {
             UISpectrumType::Temperature(_, _) => write!(f, "Temperature"),
             UISpectrumType::ReflectiveRed(_) => write!(f, "Reflective red"),
             UISpectrumType::ReflectiveGreen(_) => write!(f, "Reflective green"),
+            UISpectrumType::ReflectiveBlue(_) => write!(f, "Reflective blue"),
         }
     }
 }
@@ -1720,6 +1745,7 @@ impl UIObject {
         }
     }
 
+    /// Generates a simple box as a default object which the user can then edit. 
     pub fn default(app: &App) -> Self {
         let spectrum = match app.ui_values.spectra.first() {
             Some(spec_ref) => {
