@@ -1083,6 +1083,23 @@ impl App {
         }
     }
     
+    /// Copies the first [UISpectrum] from the list which is of the [SpectrumEffectType::Reflective]. 
+    /// If none exist, tries to return the first UISpectrum in general. If none exists, returns 
+    /// None. 
+    fn get_first_reflective_spectrum_or_first_general(&self) -> Option<Rc<RefCell<UISpectrum>>> {
+        for spectrum in &self.ui_values.spectra {
+            if let SpectrumEffectType::Reflective = spectrum.borrow().spectrum_effect_type {
+                return Some(spectrum.clone());
+            }
+        }
+        
+        if !self.ui_values.spectra.is_empty() {
+            Some(self.ui_values.spectra[0].clone())
+        } else {
+            None
+        }
+    }
+    
     /// A single frame render process. Takes the uniforms and mixes the image into the 
     /// [CustomImage](custom_image::CustomImage) at the appropriate level. 
     fn apply_shader2(img: &mut custom_image::CustomImage, uniforms: Arc<RaytracingUniforms>, thread_pool: &ThreadPool) {
@@ -1747,9 +1764,9 @@ impl UIObject {
 
     /// Generates a simple box as a default object which the user can then edit. 
     pub fn default(app: &App) -> Self {
-        let spectrum = match app.ui_values.spectra.first() {
+        let spectrum = match app.get_first_reflective_spectrum_or_first_general() {
             Some(spec_ref) => {
-                spec_ref.clone()
+                spec_ref
             }
             None => {
                 let plain_spectrum = Spectrum::new_singular_reflectance_factor(
