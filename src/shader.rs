@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
-use nalgebra::{point, vector, Const, Matrix3, OMatrix, OPoint, Point3, Rotation3, Vector3};
+use nalgebra::{point, vector, Const, OMatrix, OPoint, Point3, Rotation3, Vector3};
 use crate::{UICamera, UILight, UIObject, UIObjectType};
 use crate::spectrum::Spectrum;
 
@@ -394,11 +394,8 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         //indirect light contribution (diffuse - random - light ray bounces)
         if ray.max_bounces > 1 {
             let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,    //TODO do in front of if and use third random for metallicness
-                                                       ray.original_pixel_pos.y, uniforms.frame_id);
-            let theta = random_x.sqrt().asin(); //importance sampling of a sphere, therefore no direction correction necessary later
-            let phi = 2.0 * PI * random_y;
-            let local_direction = vector![theta.sin() * phi.cos(), theta.sin() * phi.sin(), theta.cos()];
-            let new_direction = get_normal_space2(&normal) * local_direction;
+                                                       ray.original_pixel_pos.y, uniforms.frame_id + ray.max_bounces);
+            let new_direction = global_space_random_bounce_direction(random_x, random_y, &normal);  //importance sampling of a sphere, therefore no direction correction necessary later
             let mut new_ray = Ray::new(intersection_point, new_direction,
                                    ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);
             submit_ray(&mut new_ray, uniforms);
@@ -410,18 +407,6 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     }
     
     ray.spectrum = &aabb.reflective_spectrum * &received_spectrum;
-}
-
-/// https://www.gsn-lib.org/apps/raytracing/index.php?name=example_emissivesphere
-fn get_normal_space2(normal: &Vector3<f32>) -> Matrix3<f32> {
-    let some_vec = Vector3::<f32>::new(1.0, 0.0, 0.0);
-    let dd = some_vec.dot(normal);
-    let mut tangent = Vector3::<f32>::new(0.0, 1.0, 0.0);
-    if 1.0 - dd.abs() > F32_DELTA {
-        tangent = some_vec.cross(normal).normalize()
-    }
-    let bi_tangent = normal.cross(&tangent);
-    Matrix3::from_columns(&[tangent, bi_tangent, *normal])
 }
 
 /// The miss shader. It is called on a submitted ray if this ray does ultimately not hit anything. 
@@ -496,6 +481,8 @@ fn ray_sphere_intersection(ray: &Ray, sphere_pos: &Point3<f32>, sphere_rad: f32)
     }
 }
 
+/// Calculates the potential intersections of a ray and a plain box. Returns the length of the ray 
+/// upon hitting the sides iff the ray intersects the box, else None. 
 fn ray_aabb_intersection(ray_origin: &Point3<f32>, ray_direction: &Vector3<f32>, 
                          point_min: &Point3<f32>, point_max: &Point3<f32>) -> Option<(f32, f32)> {
     let mut t_min = f32::NEG_INFINITY;
@@ -523,6 +510,8 @@ fn ray_aabb_intersection(ray_origin: &Point3<f32>, ray_direction: &Vector3<f32>,
     Some((t_min, t_max)) 
 }
 
+/// Calculates the potential intersections of a ray and a rotated box. Returns the length of the ray 
+/// upon hitting the sides iff the ray intersects the box, else None. 
 fn ray_oriented_box_intersection(ray_origin: &Point3<f32>, ray_direction: &Vector3<f32>, position: &Point3<f32>,
                                  dimensions: &Vector3<f32>, rotation: &Rotation3<f32>, ) -> Option<(f32, f32)> {
     //build the box's world-to-local transform
@@ -544,6 +533,7 @@ fn ray_oriented_box_intersection(ray_origin: &Point3<f32>, ray_direction: &Vecto
     )
 }
 
+/// Calculate the normal for a given hit on a plain box. 
 fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Const<3>>) -> OMatrix<f32, Const<3>, Const<1>> {
     let x = if (intersection_point.x - aabb.min.x).abs() < F32_DELTA {
         -1.0
@@ -569,6 +559,7 @@ fn plain_box_normal_calculation(aabb: &Aabb, intersection_point: OPoint<f32, Con
     vector![x, y, z].normalize()
 }
 
+/// Calculates the normal for a given hit on a rotated box. 
 pub fn rotated_box_normal_calculation(pos: &Point3<f32>, dim: &Vector3<f32>, rotation: &Rotation3<f32>,
                                       intersection_point: &Point3<f32>) -> Vector3<f32> {
     let inv_rotation = rotation.inverse();
@@ -672,4 +663,22 @@ fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {    //TO
 /// The incident must point towards the normal, not away as one might think.
 fn reflect_vec(incident: &Vector3<f32>, normal: &Vector3<f32>) -> Vector3<f32> {
     incident - 2.0 * normal.dot(incident) * normal
+}
+
+/// Generates a random bounce direction for a given direction. <br>
+/// Takes two random variables in range \[0; 1] as well as a normal. The two random variables are 
+/// used to generate a local vector in a hemisphere pointing in the positive Z direction. The 
+/// local vector is then rotated in such a way that the hemisphere aligns with the normal. 
+fn global_space_random_bounce_direction(random_x: f32, random_y: f32, normal: &Vector3<f32>) -> Vector3<f32> {
+    //importance sampling 
+    let theta = random_x.sqrt().asin(); 
+    let phi = 2.0 * PI * random_y;
+    let local_direction = vector![theta.sin() * phi.cos(), theta.sin() * phi.sin(), theta.cos()];
+    
+    //transforming the local direction into global
+    let mut up = Vector3::y();
+    if normal.dot(&up).abs() > 0.9999 {
+        up = Vector3::x();
+    }
+    Rotation3::face_towards(normal, &up) * local_direction
 }

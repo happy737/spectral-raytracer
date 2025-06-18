@@ -202,7 +202,7 @@ impl App {
     fn display_max_bounces_edit_field(&mut self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal_top(|ui| {
-                ui.label("Max bounces per ray:").on_hover_text(MAX_BOUNCES_TOOLTIP);
+                ui.label("Maximum recursion depth:").on_hover_text(MAX_BOUNCES_TOOLTIP);
                 ui.add(egui::Slider::new(&mut self.ui_values.nbr_of_ray_bounces, 1..=NEW_RAY_MAX_BOUNCES_MAX));
                 if ui.button(" - ").clicked() {
                     self.ui_values.nbr_of_ray_bounces -= 1;
@@ -599,7 +599,6 @@ impl App {
                         }
                     }
                 });
-                //todo!()
             }
         }
 
