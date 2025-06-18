@@ -2179,6 +2179,11 @@ impl eframe::App for App {
                 }
                 AfterUIActions::DeleteSpectrum(index) => {
                     self.ui_values.spectra.remove(index);
+                    if self.ui_values.selected_spectrum.is_some() && 
+                            self.ui_values.selected_spectrum.as_ref().unwrap().selected_spectrum == index {
+                        
+                        self.ui_values.selected_spectrum = None;
+                    }
                 }
                 AfterUIActions::UpdateSelectedSpectrum(index) => {
                     self.update_selected_spectrum(index);
