@@ -1905,7 +1905,7 @@ fn display_factor(ui: &mut Ui, factor: &mut f32) -> bool {
 
         if factor_string.parse::<f32>().is_ok() {
             let new_factor = factor_string.parse::<f32>().unwrap();
-            if new_factor != *factor && new_factor > 0.0 {
+            if new_factor != *factor && new_factor >= 0.0 {
                 *factor = new_factor;
                 changed = true;
             }
