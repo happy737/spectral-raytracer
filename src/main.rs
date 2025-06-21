@@ -1727,6 +1727,19 @@ impl UILight {
     }
 }
 
+impl Clone for UILight {
+    fn clone(&self) -> Self {
+        UILight {
+            pos_x: self.pos_x,
+            pos_y: self.pos_y,
+            pos_z: self.pos_z,
+            spectrum: self.spectrum.clone(),
+            name: self.name.clone(),
+            editing_name: false,
+        }
+    }
+}
+
 /// This struct is a collection of values which can be assembled to a Camera object. Coupled values
 /// such as position x, y and z are separated here to allow for easier manipulation by the ui. 
 struct UICamera {
@@ -1822,6 +1835,21 @@ impl UIObject {
     }
 }
 
+impl Clone for UIObject {
+    fn clone(&self) -> Self {
+        UIObject {
+            pos_x: self.pos_x,
+            pos_y: self.pos_y,
+            pos_z: self.pos_z,
+            metallicness: self.metallicness,
+            spectrum: self.spectrum.clone(),
+            ui_object_type: self.ui_object_type,
+            name: self.name.clone(),
+            editing_name: false,       
+        }
+    }
+}
+
 impl Display for UIObject {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = match self.ui_object_type {
@@ -1835,6 +1863,7 @@ impl Display for UIObject {
 
 /// An enum which differentiates the type of the [UIObjects](UIObject). Different types will be 
 /// assembled to different geometric shapes in the render process. 
+#[derive(Debug, Clone, Copy)]
 enum UIObjectType {
     PlainBox(f32, f32, f32),
     Sphere(f32),
@@ -1876,6 +1905,8 @@ enum AfterUIActions {
     UpdateSelectedSpectrum(usize),
     DeselectSelectedSpectrum,
     CopySpectrum(usize),
+    CopyLight(usize),
+    CopyObject(usize),
 }
 
 /// An enum to send messages from the UI thread over to the currently rendering thread.
@@ -2097,8 +2128,14 @@ impl eframe::App for App {
                             });
                         });
                         for index in 0..self.ui_values.ui_lights.len() {
-                            egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
-                                self.display_light_source_settings(ui, index);
+                            ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+                                egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                    self.display_light_source_settings(ui, index);
+                                })
+                            }).response.context_menu(|ui| {
+                                if ui.button("Copy").clicked() {
+                                    self.ui_values.after_ui_action = Some(AfterUIActions::CopyLight(index))
+                                }
                             });
                         }
                         ui.add_space(10.0);
@@ -2115,8 +2152,14 @@ impl eframe::App for App {
                             });
                         });
                         for index in 0..self.ui_values.ui_objects.len() {
-                            egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
-                                self.display_objects_settings(ui, index);   //TODO ui setting for reflectivity
+                            ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+                                egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                    self.display_objects_settings(ui, index);   //TODO ui setting for reflectivity
+                                });
+                            }).response.context_menu(|ui| {
+                                if ui.button("Copy").clicked() {
+                                    self.ui_values.after_ui_action = Some(AfterUIActions::CopyObject(index))
+                                }
                             });
                         }
                     });
@@ -2271,6 +2314,16 @@ impl eframe::App for App {
                     let mut new_ui_spectrum = self.ui_values.spectra[index].borrow().clone();
                     new_ui_spectrum.name += COPIED_ELEMENT_NAME_INDICATOR;
                     self.ui_values.spectra.insert(index + 1, Rc::new(RefCell::new(new_ui_spectrum)));
+                }
+                AfterUIActions::CopyLight(index) => {
+                    let mut new_ui_light = self.ui_values.ui_lights[index].clone();
+                    new_ui_light.name += COPIED_ELEMENT_NAME_INDICATOR;
+                    self.ui_values.ui_lights.insert(index + 1, new_ui_light);
+                }
+                AfterUIActions::CopyObject(index) => {
+                    let mut new_ui_object = self.ui_values.ui_objects[index].clone();
+                    new_ui_object.name += COPIED_ELEMENT_NAME_INDICATOR;
+                    self.ui_values.ui_objects.insert(index + 1, new_ui_object);
                 }
             }
         }
