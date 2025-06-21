@@ -105,3 +105,4 @@ pub const EDIT_BUTTON_TOOLTIP: &str = "Change the name of this element.";
 pub const HELP_MENU_LABEL: &str = "For a simple tutorial, see the README.md file. For explanations \
     what the different settings do, hover over them for a short period of time to see their \
     tooltips.";
+pub const COPIED_ELEMENT_NAME_INDICATOR: &str = " (copy)";

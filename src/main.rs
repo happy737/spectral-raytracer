@@ -1566,7 +1566,7 @@ struct UISelectedSpectrum {
 
 /// A container for the [Spectrum] datatype. Holds additional information such as a label for 
 /// convenience of the user.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct UISpectrum {
     id: u32,
     name: String,
@@ -1591,6 +1591,19 @@ impl UISpectrum {
     /// Updates the UISpectrum. Overwrites the attached spectrum with the changes made by the user.
     pub fn edit(&mut self, update: &UISelectedSpectrum) {
         self.spectrum = update.spectrum;
+    }
+}
+
+impl Clone for UISpectrum {
+    fn clone(&self) -> Self {
+        UISpectrum {
+            id: get_id(),
+            name: self.name.clone(),
+            editing_name: false,
+            spectrum_type: self.spectrum_type,
+            spectrum_effect_type: self.spectrum_effect_type,
+            spectrum: self.spectrum,
+        }
     }
 }
 
@@ -1862,6 +1875,7 @@ enum AfterUIActions {
     DeleteSpectrum(usize),
     UpdateSelectedSpectrum(usize),
     DeselectSelectedSpectrum,
+    CopySpectrum(usize),
 }
 
 /// An enum to send messages from the UI thread over to the currently rendering thread.
@@ -2153,13 +2167,19 @@ impl eframe::App for App {
                                     }
 
                                     //add actual spectrum UI elements
-                                    if ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+                                    let response =  ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
                                         egui::Frame::NONE.fill(color).inner_margin(5.0).show(ui, |ui| {
                                             self.display_spectrum_settings(ui, index);
                                         });
-                                    }).response.clicked()  {
+                                    }).response;
+                                    if response.clicked()  {
                                         self.update_selected_spectrum(index);
                                     };
+                                    response.context_menu(|ui| {
+                                        if ui.button("Copy").clicked() {
+                                            self.ui_values.after_ui_action = Some(AfterUIActions::CopySpectrum(index));
+                                        }
+                                    });
                                 }
                                 ui.add_space(10.0);
                                 //TODO material settings
@@ -2246,6 +2266,11 @@ impl eframe::App for App {
                 }
                 AfterUIActions::DeselectSelectedSpectrum => {
                     self.ui_values.selected_spectrum = None;
+                }
+                AfterUIActions::CopySpectrum(index) => {
+                    let mut new_ui_spectrum = self.ui_values.spectra[index].borrow().clone();
+                    new_ui_spectrum.name += COPIED_ELEMENT_NAME_INDICATOR;
+                    self.ui_values.spectra.insert(index + 1, Rc::new(RefCell::new(new_ui_spectrum)));
                 }
             }
         }
