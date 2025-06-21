@@ -218,11 +218,23 @@ impl App {
     
     /// Shortcut function that generates and displays the time taken to render the image. 
     fn display_frame_generation_time(&mut self, ui: &mut Ui) {
-        let s = match self.ui_values.frame_gen_time {
-            Some(s) => format!("{:.3?}", s),
-            None => "".to_string(),
+        let (s, t) = match self.ui_values.frame_gen_time {
+            Some(duration) => {
+                let mut remaining_duration = Duration::ZERO;
+
+                let progress = self.ui_values.progress_bar_progress;
+                if !(progress == 0.0 || progress == 1.0) {
+                    let total_duration = duration.div_f32(progress);
+                    remaining_duration = total_duration.mul_f32(1.0 - progress);
+                }
+                
+                (format!("{:.3?}", duration), format!("{:.3?}", remaining_duration))
+            },
+            None => ("-".to_string(), "-".to_string()),
         };
+
         ui.label(format!("Time to generate image: {s}"));
+        ui.label(format!("Approximate time remaining: {t}"));
     }
     
     /// Shortcut function to display various settings for the camera. The settings can be changed 
@@ -839,8 +851,8 @@ impl App {
                 //factor
                 changed = display_factor(ui, factor) || changed;
             }
-            UISpectrumType::ReflectiveRed(factor) | 
-            UISpectrumType::ReflectiveGreen(factor) | 
+            UISpectrumType::ReflectiveRed(factor) |
+            UISpectrumType::ReflectiveGreen(factor) |
             UISpectrumType::ReflectiveBlue(factor) => {
                 //factor
                 changed = display_factor(ui, factor);
@@ -1001,6 +1013,7 @@ impl App {
     fn refresh_rendering_time(&mut self) {
         let rendering = self.currently_rendering.lock().unwrap();
         if *rendering {
+            //manage frame_gen_time
             if self.rendering_since.is_none() {
                 self.rendering_since = Some(Instant::now());
             }
@@ -1082,17 +1095,17 @@ impl App {
             self.dispatch_render();
         }
     }
-    
-    /// Copies the first [UISpectrum] from the list which is of the [SpectrumEffectType::Reflective]. 
-    /// If none exist, tries to return the first UISpectrum in general. If none exists, returns 
-    /// None. 
+
+    /// Copies the first [UISpectrum] from the list which is of the [SpectrumEffectType::Reflective].
+    /// If none exist, tries to return the first UISpectrum in general. If none exists, returns
+    /// None.
     fn get_first_reflective_spectrum_or_first_general(&self) -> Option<Rc<RefCell<UISpectrum>>> {
         for spectrum in &self.ui_values.spectra {
             if let SpectrumEffectType::Reflective = spectrum.borrow().spectrum_effect_type {
                 return Some(spectrum.clone());
             }
         }
-        
+
         if !self.ui_values.spectra.is_empty() {
             Some(self.ui_values.spectra[0].clone())
         } else {
@@ -1540,9 +1553,9 @@ impl Default for UIFields {
     }
 }
 
-/// A struct dedicated to holding the currently selected spectrum. This struct allows for quick 
-/// access to individual spectrum values and the spectrum itself to display each wavelength 
-/// value and the final colors. 
+/// A struct dedicated to holding the currently selected spectrum. This struct allows for quick
+/// access to individual spectrum values and the spectrum itself to display each wavelength
+/// value and the final colors.
 struct UISelectedSpectrum {
     pub selected_spectrum: usize,
     pub max: f32,
@@ -1762,7 +1775,7 @@ impl UIObject {
         }
     }
 
-    /// Generates a simple box as a default object which the user can then edit. 
+    /// Generates a simple box as a default object which the user can then edit.
     pub fn default(app: &App) -> Self {
         let spectrum = match app.get_first_reflective_spectrum_or_first_general() {
             Some(spec_ref) => {
@@ -1931,18 +1944,18 @@ fn is_time_even() -> bool {
     std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() % 2 == 0
 }
 
-/// Takes a list of [AppActions] and removes all but the last [AppActions::FrameUpdate]. Having 
-/// multiple frame updates will result in wasted work since all previous frames will be overwritten 
-/// by the most recent frame update. 
+/// Takes a list of [AppActions] and removes all but the last [AppActions::FrameUpdate]. Having
+/// multiple frame updates will result in wasted work since all previous frames will be overwritten
+/// by the most recent frame update.
 fn reduce_action_list(action_list: &mut Vec<AppActions>) {
     let mut nbr_of_frame_updates = 0;
-    
+
     for action in action_list.iter() {
         if let AppActions::FrameUpdate(_) = action {
             nbr_of_frame_updates += 1;
         }
     }
-    
+
     if nbr_of_frame_updates > 1 {
         let mut found_last = false;
         for i in (0..action_list.len()).rev() {
@@ -1950,7 +1963,7 @@ fn reduce_action_list(action_list: &mut Vec<AppActions>) {
                 if !found_last {
                     found_last = true;
                 } else {
-                    action_list.remove(i);   
+                    action_list.remove(i);
                 }
             }
         }
@@ -2222,9 +2235,9 @@ impl eframe::App for App {
                 }
                 AfterUIActions::DeleteSpectrum(index) => {
                     self.ui_values.spectra.remove(index);
-                    if self.ui_values.selected_spectrum.is_some() && 
+                    if self.ui_values.selected_spectrum.is_some() &&
                             self.ui_values.selected_spectrum.as_ref().unwrap().selected_spectrum == index {
-                        
+
                         self.ui_values.selected_spectrum = None;
                     }
                 }
@@ -2236,8 +2249,8 @@ impl eframe::App for App {
                 }
             }
         }
-        
-        
+
+
         //Other frames may have finished work
         let mut separate_action_list;
         {   //block to drop the action list mutex guard
