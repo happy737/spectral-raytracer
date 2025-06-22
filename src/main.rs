@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -19,7 +19,7 @@ use eframe::egui;
 use eframe::egui::{menu, Color32, ComboBox, IconData, Sense, TextEdit, TopBottomPanel, Ui, UiBuilder};
 use eframe::epaint::Vec2;
 use image::DynamicImage;
-use log::{error, warn};
+use log::{error, info, warn};
 use nalgebra::Vector3;
 use threadpool::ThreadPool;
 use crate::shader::{PixelPos, RaytracingUniforms};
@@ -1232,8 +1232,8 @@ impl App {
         );
 
         let uniforms = RaytracingUniforms{
-            aabbs: Arc::new(self.ui_values.ui_objects.iter().map(|o| o.into()).collect()),
-            lights: Arc::new(self.ui_values.ui_lights.iter().map(|l| l.into()).collect()),
+            aabbs: Arc::new(self.ui_values.ui_objects.iter().filter(|o| !o.hidden).map(|o| o.into()).collect()),
+            lights: Arc::new(self.ui_values.ui_lights.iter().filter(|l| !l.hidden).map(|l| l.into()).collect()),
             camera: shader::Camera::from(&self.ui_values.ui_camera),
             frame_id: 0,
             intended_frames_amount: self.ui_values.nbr_of_iterations,
@@ -1712,6 +1712,7 @@ struct UILight {
     spectrum: Rc<RefCell<UISpectrum>>,
     name: String,
     editing_name: bool,
+    hidden: bool,
 }
 
 impl UILight {
@@ -1723,6 +1724,7 @@ impl UILight {
             spectrum,
             name,
             editing_name: false,
+            hidden: false,
         }
     }
 }
@@ -1736,6 +1738,7 @@ impl Clone for UILight {
             spectrum: self.spectrum.clone(),
             name: self.name.clone(),
             editing_name: false,
+            hidden: self.hidden,
         }
     }
 }
@@ -1785,6 +1788,7 @@ struct UIObject {
     ui_object_type: UIObjectType,
     name: String,
     editing_name: bool,
+    hidden: bool,
 }
 
 impl UIObject {
@@ -1798,6 +1802,7 @@ impl UIObject {
             ui_object_type,
             name,
             editing_name: false,
+            hidden: false,
         }
     }
 
@@ -1831,6 +1836,7 @@ impl UIObject {
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
             name: "New Object".to_string(),
             editing_name: false,
+            hidden: false,
         }
     }
 }
@@ -1845,7 +1851,8 @@ impl Clone for UIObject {
             spectrum: self.spectrum.clone(),
             ui_object_type: self.ui_object_type,
             name: self.name.clone(),
-            editing_name: false,       
+            editing_name: false,
+            hidden: self.hidden,
         }
     }
 }
@@ -1862,7 +1869,7 @@ impl Display for UIObject {
 }
 
 /// An enum which differentiates the type of the [UIObjects](UIObject). Different types will be 
-/// assembled to different geometric shapes in the render process. 
+/// assembled to different geometric shapes in the render process.
 #[derive(Debug, Clone, Copy)]
 enum UIObjectType {
     PlainBox(f32, f32, f32),
@@ -2128,13 +2135,24 @@ impl eframe::App for App {
                             });
                         });
                         for index in 0..self.ui_values.ui_lights.len() {
+                            let hidden = self.ui_values.ui_lights[index].hidden;
+                            let color = if hidden {Color32::GRAY} else {Color32::LIGHT_GRAY};
+
                             ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
-                                egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                egui::Frame::NONE.fill(color).inner_margin(5.0).show(ui, |ui| {
                                     self.display_light_source_settings(ui, index);
                                 })
                             }).response.context_menu(|ui| {
                                 if ui.button("Copy").clicked() {
                                     self.ui_values.after_ui_action = Some(AfterUIActions::CopyLight(index))
+                                }
+                                
+                                //adding actual size since button would wrap otherwise
+                                let hide_button_text = if hidden { "Show" } else { "Hide" };
+                                let button = egui::Button::new(hide_button_text).min_size([40.0, 0.0].into());
+                                if ui.add(button).clicked() {
+                                //if ui.button(hide_button_text).clicked() {
+                                    self.ui_values.ui_lights[index].hidden = !hidden;
                                 }
                             });
                         }
@@ -2152,13 +2170,23 @@ impl eframe::App for App {
                             });
                         });
                         for index in 0..self.ui_values.ui_objects.len() {
+                            let hidden = self.ui_values.ui_objects[index].hidden;
+                            let color = if hidden {Color32::GRAY} else {Color32::LIGHT_GRAY};
+                            
                             ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
-                                egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                egui::Frame::NONE.fill(color).inner_margin(5.0).show(ui, |ui| {
                                     self.display_objects_settings(ui, index);   //TODO ui setting for reflectivity
                                 });
                             }).response.context_menu(|ui| {
                                 if ui.button("Copy").clicked() {
-                                    self.ui_values.after_ui_action = Some(AfterUIActions::CopyObject(index))
+                                    self.ui_values.after_ui_action = Some(AfterUIActions::CopyObject(index));
+                                }
+                                
+                                //adding actual size since button would wrap otherwise
+                                let hide_button_text = if hidden { "Show" } else { "Hide" };
+                                let button = egui::Button::new(hide_button_text).min_size([40.0, 0.0].into());
+                                if ui.add(button).clicked() {
+                                    self.ui_values.ui_objects[index].hidden = !hidden;
                                 }
                             });
                         }
