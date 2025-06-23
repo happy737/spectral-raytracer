@@ -32,6 +32,7 @@ const NBR_OF_ITERATIONS_DEFAULT: u32 = 100;
 const NBR_OF_SPECTRUM_SAMPLES_DEFAULT: usize = 32;
 const NEW_RAY_MAX_BOUNCES_DEFAULT: u32 = 30;
 const NEW_RAY_MAX_BOUNCES_MAX: u32 = 100;
+const MAX_CHARS_IN_NAME_STRING: usize = 40;
 
 static COUNTER: AtomicU32 = AtomicU32::new(1);
 fn get_id() -> u32 { COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed) }
@@ -1979,6 +1980,12 @@ fn display_name_with_edit(ui: &mut Ui, name: &mut String, backup: &String, editi
     if *editing {
         if ui.text_edit_singleline(name).lost_focus() {
             *editing = false;
+        }
+
+        //truncate string to first n chars. 
+        //TODO instead use n graphemes
+        if let Some((x, _)) = name.char_indices().nth(MAX_CHARS_IN_NAME_STRING) {
+            name.truncate(x);
         }
     } else {
         let label_content = if name.is_empty() {
