@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Div, Index, IndexMut, Mul, MulAssign};
+use std::ops::{AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign};
 use nalgebra::{Matrix3, Vector3};
 
 pub const VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND: f32 = 380.0;
@@ -118,6 +118,21 @@ impl Spectrum {
         }
 
         Self::new_from_list(&arr, lowest_wavelength, highest_wavelength, nbr_of_samples)
+    }
+    
+    pub fn new_normalized_white(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize) -> Self {
+        let mut unnormalized_white = Spectrum::new_sunlight_spectrum(
+            lowest_wavelength,
+            highest_wavelength,
+            nbr_of_samples,
+            1.0
+        );
+        
+        let (r, g, b) = unnormalized_white.to_rgb_early();
+        let normalization_factor = r.max(g.max(b));
+        unnormalized_white /= normalization_factor;
+        
+        unnormalized_white
     }
     
     /// Generates a reflective spectrum which is the given factor for wavelengths greater than 
@@ -417,6 +432,16 @@ impl Div<f32> for &Spectrum {
         }
 
         Spectrum::new(&new_arr, self.spectrum_type, self.nbr_of_samples)
+    }
+}
+
+impl DivAssign<f32> for Spectrum {
+    fn div_assign(&mut self, rhs: f32) {
+        assert_eq!(self.nbr_of_samples % 8, 0);
+        
+        for i in 0..self.nbr_of_samples {
+            self.intensities[i] /= rhs;
+        }
     }
 }
 

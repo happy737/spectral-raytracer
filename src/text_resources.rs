@@ -66,6 +66,8 @@ pub const OBSERVED_COLOR_TOOLTIP: &str = "The color of the spectrum when looking
 pub const NORMALIZED_COLOR_TOOLTIP: &str = "The color of the spectrum when it is sufficiently \
     dimmed or brightened. This view shows what kind of color a light source could throw unto a \
     distant object.";
+pub const REFLECTED_COLOR_TOOLTIP: &str = "The color of an (approximately) white spectrum when it \
+    is reflected by a surface with this reflective spectrum.";
 pub const SPECTRUM_TYPE_TOOLTIP: &str = "The preliminary type of the spectrum. The type \
     determines the initial shape of the spectrum. The type can be changed to custom, which \
     allows for direct editing of the samples. \nBeware: In opposition to all other types, changing \

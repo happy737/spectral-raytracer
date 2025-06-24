@@ -924,23 +924,48 @@ impl App {
                                 ui.label("Normalized Color").on_hover_text(NORMALIZED_COLOR_TOOLTIP);
                             });
                         });
+
+                        ui.add_space(5.0);
+
+                        //radiance
+                        ui.horizontal_top(|ui| {
+                            ui.label(format!("Radiance of the spectrum: {}W/sr/m^2",
+                                             spectrum.get_radiance()))
+                                .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
+                        });
+
+                        let normalize_factor = r.max(g.max(b));
+                        let required_distance = normalize_factor.sqrt();
+                        ui.label(format!("Distance to an object required to achieve normalized color: {required_distance} units."));
                     }
                     SpectrumEffectType::Reflective => {
+                        //white reflected
+                        let reflected_spectrum = &*spectrum * &self.ui_values.normalized_white_spectrum;
+                        let (r, g, b) = reflected_spectrum.to_rgb_early();
+
+                        ui.vertical(|ui| {
+                            let r_byte = (r.clamp(0.0, 1.0) * 255.0) as u8;
+                            let g_byte = (g.clamp(0.0, 1.0) * 255.0) as u8;
+                            let b_byte = (b.clamp(0.0, 1.0) * 255.0) as u8;
+                            let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                            let contrasting_text_color = if luminance < 0.5 { Color32::WHITE } else {Color32::BLACK};
+
+                            egui::Frame::NONE.fill(Color32::from_rgb(r_byte, g_byte, b_byte))
+                                .stroke(egui::Stroke::new(1.0, Color32::LIGHT_GRAY))
+                                .show(ui, |ui| {
+                                    ui.set_max_size(Vec2::new(200.0, 100.0));
+                                    ui.centered_and_justified(|ui| {
+                                        ui.colored_label(contrasting_text_color, format!("{r_byte:02X}{g_byte:02X}{b_byte:02X}"));
+                                    });
+                                }).response.on_hover_text(REFLECTED_COLOR_TOOLTIP);
+                            ui.label("Reflected Color").on_hover_text(REFLECTED_COLOR_TOOLTIP);
+                        });
+
                         //no color squares
                         ui.label("Color Preview not (yet) available for reflective spectra.");
                     }
                 }
                 ui.add_space(5.0);
-                
-                //radiance
-                if selected.spectrum_effect_type != SpectrumEffectType::Reflective {
-                    ui.horizontal_top(|ui| {
-                        ui.label(format!("Radiance of the spectrum: {}W/sr/m^2",
-                                         spectrum.get_radiance()))
-                            .on_hover_text(SPECTRUM_RADIANCE_TOOLTIP);
-                    });
-                    ui.add_space(5.0);
-                }
                 
                 //samples
                 let editable = matches!(selected.ui_spectrum_type, UISpectrumType::Custom);
@@ -1363,6 +1388,7 @@ struct UIFields {
     spectrum_number_of_samples: usize,
     selected_spectrum: Option<UISelectedSpectrum>,
     image_scene_rect: egui::emath::Rect,
+    normalized_white_spectrum: Spectrum,
 }
 
 impl UIFields {
@@ -1530,6 +1556,12 @@ impl Default for UIFields {
             spectrum_white,
         ];
         
+        let normalized_white_spectrum = Spectrum::new_normalized_white(
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
+            spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
+            NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
+        );
+        
         
         Self {
             width: 600,
@@ -1550,6 +1582,7 @@ impl Default for UIFields {
             spectrum_number_of_samples: NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
             selected_spectrum: None,
             image_scene_rect: egui::emath::Rect::ZERO,
+            normalized_white_spectrum,
         }
     }
 }
@@ -1982,7 +2015,7 @@ fn display_name_with_edit(ui: &mut Ui, name: &mut String, backup: &String, editi
             *editing = false;
         }
 
-        //truncate string to first n chars. 
+        //truncate string to first n chars.
         //TODO instead use n graphemes
         if let Some((x, _)) = name.char_indices().nth(MAX_CHARS_IN_NAME_STRING) {
             name.truncate(x);
