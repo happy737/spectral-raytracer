@@ -858,7 +858,21 @@ impl App {
                 //factor
                 changed = display_factor(ui, factor);
             }
-            UISpectrumType::Custom => {}
+            UISpectrumType::Custom => {
+                ui.horizontal_top(|ui| {
+                    ui.label("Adjustment:").on_hover_text(CUSTOM_SPECTRUM_FACTOR_ADJUST_TOOLTIP);
+
+                    ui.style_mut().spacing.slider_width = 200.0;
+                    let slider = egui::Slider::new(&mut ui_spectrum.adjust_custom_spectrum_slider, 0.01..=100.0).logarithmic(true);
+                    ui.add(slider);
+                    
+                    if ui.button("Apply").clicked() {
+                        let factor = ui_spectrum.adjust_custom_spectrum_slider;
+                        ui_spectrum.spectrum *= factor;
+                        changed = true; 
+                    }
+                });
+            }
         }
 
 
@@ -1608,6 +1622,7 @@ struct UISpectrum {
     spectrum_type: UISpectrumType,
     spectrum_effect_type: SpectrumEffectType,
     spectrum: Spectrum,
+    adjust_custom_spectrum_slider: f32,
 }
 
 impl UISpectrum {
@@ -1619,6 +1634,7 @@ impl UISpectrum {
             spectrum_type,
             spectrum_effect_type,
             spectrum,
+            adjust_custom_spectrum_slider: 1.0,
         }
     }
 
@@ -1637,6 +1653,7 @@ impl Clone for UISpectrum {
             spectrum_type: self.spectrum_type,
             spectrum_effect_type: self.spectrum_effect_type,
             spectrum: self.spectrum,
+            adjust_custom_spectrum_slider: self.adjust_custom_spectrum_slider,
         }
     }
 }
@@ -1726,6 +1743,7 @@ impl From<Spectrum> for UISpectrum {
             spectrum_type: UISpectrumType::Custom,
             spectrum_effect_type: SpectrumEffectType::Emissive,
             spectrum,
+            adjust_custom_spectrum_slider: 1.0,
         }
     }
 }

@@ -88,6 +88,8 @@ pub const SPECTRUM_WAVELENGTH_EDIT_NOT_SUPPORTED_TOOLTIP: &str = "Editing the wa
 pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not allowed unless \
     their type has been changed to custom. After a spectrum is converted to custom, the number of \
     samples should no longer be changed.";
+pub const CUSTOM_SPECTRUM_FACTOR_ADJUST_TOOLTIP: &str = "Multiply the spectrum by this value. The \
+    values will only be adjusted upon pressing the Apply button.";
 
 
 //display
