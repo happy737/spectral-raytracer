@@ -954,8 +954,17 @@ impl App {
                     }
                     SpectrumEffectType::Reflective => {
                         ui.horizontal_top(|ui| {
-                            ui.label("Use custom spectrum for base spectrum?");
-                            ui.checkbox(&mut self.ui_values.select_custom_reflective_base_spectrum, "");
+                            ui.label("Use custom spectrum for base spectrum?")
+                                .on_hover_text(REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP);
+                            ui.checkbox(&mut self.ui_values.select_custom_reflective_base_spectrum, "")
+                                .on_hover_text(REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP);
+                            
+                            ui.add_space(10.0);
+                            
+                            ui.label("Normalize custom spectrum?")
+                                .on_hover_text(REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP);
+                            ui.checkbox(&mut self.ui_values.normalize_reflective_base_spectrum, "")
+                                .on_hover_text(REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP);
                         });
                         
                         let reflective_base = if self.ui_values.select_custom_reflective_base_spectrum {
@@ -967,7 +976,8 @@ impl App {
                                 selected_name = borrow.to_string();
                             }
                             ui.horizontal_top(|ui| {
-                                ui.label("Base spectrum which will be reflected by the selected spectrum.");
+                                ui.label("Base spectrum which will be reflected by the selected spectrum.")
+                                    .on_hover_text(REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP);
                                 Self::display_combobox_with_spectrum_list(
                                     &mut self.ui_values.spectra,
                                     ui,
@@ -980,7 +990,11 @@ impl App {
 
 
                             let borrow = current_reflective_base_ui_spectrum.borrow();
-                            borrow.spectrum
+                            if self.ui_values.normalize_reflective_base_spectrum {
+                                borrow.spectrum.normalize()
+                            } else {
+                                borrow.spectrum
+                            }
                         } else {
                             //use normalized white spectrum
                             self.ui_values.normalized_white_spectrum
@@ -1438,6 +1452,7 @@ struct UIFields {
     normalized_white_spectrum: Spectrum,
     selected_reflective_base_spectrum: Rc<RefCell<UISpectrum>>,
     select_custom_reflective_base_spectrum: bool,
+    normalize_reflective_base_spectrum: bool,
 }
 
 impl UIFields {
@@ -1635,6 +1650,7 @@ impl Default for UIFields {
             normalized_white_spectrum,
             selected_reflective_base_spectrum: reflective_spectra,
             select_custom_reflective_base_spectrum: false,
+            normalize_reflective_base_spectrum: true,
         }
     }
 }

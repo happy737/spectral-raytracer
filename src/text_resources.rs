@@ -93,6 +93,10 @@ pub const CUSTOM_SPECTRUM_FACTOR_ADJUST_TOOLTIP: &str = "Multiply the spectrum b
 pub const REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP: &str = "Choose which of your spectra shall \
     serve as the base spectrum for this object. The base spectrum is the spectrum which is \
     reflected by the object.";
+pub const REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP: &str = "Check this box if you want a \
+    comparable color. The to-be-reflected spectrum will be brightened or dimmed sufficiently \
+    to show a bright color, which can then accurately portray the changed brightness after it has \
+    been reflected.";
 
 
 //display
