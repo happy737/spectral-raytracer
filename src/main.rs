@@ -958,13 +958,15 @@ impl App {
                                 .on_hover_text(REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP);
                             ui.checkbox(&mut self.ui_values.select_custom_reflective_base_spectrum, "")
                                 .on_hover_text(REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP);
-                            
-                            ui.add_space(10.0);
-                            
-                            ui.label("Normalize custom spectrum?")
-                                .on_hover_text(REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP);
-                            ui.checkbox(&mut self.ui_values.normalize_reflective_base_spectrum, "")
-                                .on_hover_text(REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP);
+
+                            if self.ui_values.select_custom_reflective_base_spectrum {
+                                ui.add_space(10.0);
+
+                                ui.label("Normalize custom spectrum?")
+                                    .on_hover_text(REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP);
+                                ui.checkbox(&mut self.ui_values.normalize_reflective_base_spectrum, "")
+                                    .on_hover_text(REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP);
+                            }
                         });
                         
                         let reflective_base = if self.ui_values.select_custom_reflective_base_spectrum {
