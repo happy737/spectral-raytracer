@@ -90,6 +90,9 @@ pub const SPECTRUM_RIGHT_SLIDER_DISABLED_TOOLTIP: &str = "Editing spectra is not
     samples should no longer be changed.";
 pub const CUSTOM_SPECTRUM_FACTOR_ADJUST_TOOLTIP: &str = "Multiply the spectrum by this value. The \
     values will only be adjusted upon pressing the Apply button.";
+pub const REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP: &str = "Choose which of your spectra shall \
+    serve as the base spectrum for this object. The base spectrum is the spectrum which is \
+    reflected by the object.";
 
 
 //display

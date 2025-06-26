@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -953,8 +953,41 @@ impl App {
                         ui.label(format!("Distance to an object required to achieve normalized color: {required_distance} units."));
                     }
                     SpectrumEffectType::Reflective => {
+                        ui.horizontal_top(|ui| {
+                            ui.label("Use custom spectrum for base spectrum?");
+                            ui.checkbox(&mut self.ui_values.select_custom_reflective_base_spectrum, "");
+                        });
+                        
+                        let reflective_base = if self.ui_values.select_custom_reflective_base_spectrum {
+                            //user wants to use own spectrum
+                            let current_reflective_base_ui_spectrum = &mut self.ui_values.selected_reflective_base_spectrum;
+                            let selected_name;
+                            {   //block to implicitly drop borrow
+                                let borrow = current_reflective_base_ui_spectrum.borrow();
+                                selected_name = borrow.to_string();
+                            }
+                            ui.horizontal_top(|ui| {
+                                ui.label("Base spectrum which will be reflected by the selected spectrum.");
+                                Self::display_combobox_with_spectrum_list(
+                                    &mut self.ui_values.spectra,
+                                    ui,
+                                    "reflective_spectrum_base_selector".to_string(),
+                                    selected_name,
+                                    REFLECTIVE_SPECTRUM_BASE_SELECTION_TOOLTIP,
+                                    current_reflective_base_ui_spectrum
+                                );
+                            });
+
+
+                            let borrow = current_reflective_base_ui_spectrum.borrow();
+                            borrow.spectrum
+                        } else {
+                            //use normalized white spectrum
+                            self.ui_values.normalized_white_spectrum
+                        };
+                        
                         //white reflected
-                        let reflected_spectrum = &*spectrum * &self.ui_values.normalized_white_spectrum;
+                        let reflected_spectrum = &*spectrum * &reflective_base;
                         let (r, g, b) = reflected_spectrum.to_rgb_early();
 
                         ui.vertical(|ui| {
@@ -1403,6 +1436,8 @@ struct UIFields {
     selected_spectrum: Option<UISelectedSpectrum>,
     image_scene_rect: egui::emath::Rect,
     normalized_white_spectrum: Spectrum,
+    selected_reflective_base_spectrum: Rc<RefCell<UISpectrum>>,
+    select_custom_reflective_base_spectrum: bool,
 }
 
 impl UIFields {
@@ -1575,6 +1610,7 @@ impl Default for UIFields {
             spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
         );
+        let reflective_spectra = spectra[0].clone();
         
         
         Self {
@@ -1597,6 +1633,8 @@ impl Default for UIFields {
             selected_spectrum: None,
             image_scene_rect: egui::emath::Rect::ZERO,
             normalized_white_spectrum,
+            selected_reflective_base_spectrum: reflective_spectra,
+            select_custom_reflective_base_spectrum: false,
         }
     }
 }
