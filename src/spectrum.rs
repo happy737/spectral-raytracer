@@ -351,6 +351,17 @@ impl Spectrum {
         iter.map(|(_, spectral_radiance)| spectral_radiance * step)
             .fold(0f32, |acc, elem| acc + elem) 
     }
+    
+    /// Normalizes the given spectrum. <br>
+    /// The definition of normalizing a spectrum is: Adjusting its values in a way that the overall 
+    /// shape of the distribution remains the same, but the resulting RGB values will be in range 
+    /// \[0; 1] with the largest being 1. 
+    pub fn normalize(&self) -> Spectrum {
+        let (r, g, b) = self.to_rgb_early();
+        let normalize_factor = r.max(g.max(b));
+        
+        self / normalize_factor
+    }
 }
 
 impl AddAssign<&Spectrum> for Spectrum {
@@ -436,6 +447,16 @@ impl Div<f32> for &Spectrum {
 }
 
 impl DivAssign<f32> for Spectrum {
+    fn div_assign(&mut self, rhs: f32) {
+        assert_eq!(self.nbr_of_samples % 8, 0);
+        
+        for i in 0..self.nbr_of_samples {
+            self.intensities[i] /= rhs;
+        }
+    }
+}
+
+impl DivAssign<f32> for &mut Spectrum {
     fn div_assign(&mut self, rhs: f32) {
         assert_eq!(self.nbr_of_samples % 8, 0);
         
