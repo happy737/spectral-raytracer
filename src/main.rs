@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
+//#![windows_subsystem = "windows"] //<- completely disables std::in/out/err. Uncomment only for final versions
 
 mod shader;
 mod custom_image;
@@ -1152,7 +1152,12 @@ impl App {
             self.update_selected_spectrum(index);
             self.ui_values.after_ui_action = Some(AfterUIActions::UpdateSelectedSpectrum(index));
         }
-        //self.ui_values.after_ui_action = Some(AfterUIActions::DeselectSelectedSpectrum);
+        
+        self.ui_values.normalized_white_spectrum = Spectrum::new_normalized_white(
+            self.ui_values.spectrum_lower_bound,
+            self.ui_values.spectrum_upper_bound,
+            nbr_of_samples,
+        );
     }
 
     /// Updates all spectra. Currently, this simply calls [App::update_all_spectrum_sample_sizes].
@@ -1891,7 +1896,7 @@ struct UIObject {
     pos_x: f32,
     pos_y: f32,
     pos_z: f32,
-    metallicness: f32, 
+    metallicness: f32,
     spectrum: Rc<RefCell<UISpectrum>>,
     ui_object_type: UIObjectType,
     name: String,
