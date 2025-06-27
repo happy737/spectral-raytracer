@@ -94,10 +94,10 @@ pub(crate) struct Aabb {
     max: Point3<f32>,
     aabb_type: AABBType,
     reflective_spectrum: Spectrum,
-    metallicness: bool,  //TODO remake as f32, but now only totally diffuse or totally metallic
+    metallicness: f32,
 }   //TODO refactor material info into single struct "material"
 impl Aabb {
-    pub fn new_sphere(center: &Point3<f32>, radius: f32, spectrum: Spectrum, metallicness: bool) -> Aabb {
+    pub fn new_sphere(center: &Point3<f32>, radius: f32, spectrum: Spectrum, metallicness: f32) -> Aabb {
         Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
             max: point![center.x + radius, center.y + radius, center.z + radius],
@@ -107,7 +107,7 @@ impl Aabb {
         }
     }
     
-    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, spectrum: Spectrum, metallicness: bool) -> Aabb {
+    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, spectrum: Spectrum, metallicness: f32) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
         let z_half = z_length / 2.0;
@@ -120,7 +120,7 @@ impl Aabb {
         }
     }
     
-    pub fn new_rotated_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, rotation: Rotation3<f32>, reflective_spectrum: Spectrum, metallicness: bool) -> Aabb {
+    pub fn new_rotated_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, rotation: Rotation3<f32>, reflective_spectrum: Spectrum, metallicness: f32) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
         let z_half = z_length / 2.0;
@@ -356,8 +356,13 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
     
     //calculating how much light hits this point
     let mut received_spectrum = Spectrum::new_equal_size_empty_spectrum(&ray.spectrum);
+
+    //get deterministic random values 
+    let (random_x, random_y, random_z) = 
+        random_pcg3d(ray.original_pixel_pos.x, ray.original_pixel_pos.y, 
+                     uniforms.frame_id + ray.max_bounces);
     
-    if aabb.metallicness {  //TODO metallic rays cannot yet detect light sources
+    if random_z < aabb.metallicness {  //TODO metallic rays cannot yet detect light sources
         if ray.max_bounces > 1 {
             let direction = reflect_vec(&ray.direction, &normal);
             let mut new_ray = Ray::new(new_shot_rays_pos, direction, 
@@ -393,8 +398,6 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
 
         //indirect light contribution (diffuse - random - light ray bounces)
         if ray.max_bounces > 1 {
-            let (random_x, random_y, _) = random_pcg3d(ray.original_pixel_pos.x,    //TODO do in front of if and use third random for metallicness
-                                                       ray.original_pixel_pos.y, uniforms.frame_id + ray.max_bounces);
             let new_direction = global_space_random_bounce_direction(random_x, random_y, &normal);  //importance sampling of a sphere, therefore no direction correction necessary later
             let mut new_ray = Ray::new(intersection_point, new_direction,
                                    ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);

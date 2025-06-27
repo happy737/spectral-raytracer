@@ -492,8 +492,9 @@ impl App {
         
         //metallicness
         ui.horizontal_top(|ui| {
-            ui.label("Metallic?").on_hover_text(OBJECT_METALLICNESS_TOOLTIP);
-            ui.checkbox(&mut object.metallicness, "");
+            ui.label("Metallicness:").on_hover_text(OBJECT_METALLICNESS_TOOLTIP);
+            let slider = egui::Slider::new(&mut object.metallicness, 0.0..=1.0);
+            ui.add(slider);
         });
         
         //type specific information
@@ -1520,14 +1521,13 @@ impl UIFields {
         let rc_ui_spectrum_reflective_green = Rc::from(RefCell::from(ui_spectrum_reflective_green));
 
         let ui_objects = vec![
-            UIObject::new(0.0, 0.0, 2.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central wall".to_string()),
-            UIObject::new(0.0, 2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Ceiling".to_string()),
-            UIObject::new(0.0, -2.0, 0.0, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Floor".to_string()),
-            UIObject::new(-2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left wall".to_string()),
-            UIObject::new(2.0, 0.0, 0.0, false, rc_ui_spectrum_reflective_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right wall".to_string()),
-            UIObject::new(0.5, -0.75, -0.5, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 0.5, 0.5, 0.0, 1.0, 0.0), "Right front box".to_string()),
-            UIObject::new(-0.5, -0.4, 0.5, false, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 1.2, 0.5, 0.0, -0.5, 0.0), "Left back box".to_string()),
-            //TODO
+            UIObject::new(0.0, 0.0, 2.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central wall".to_string()),
+            UIObject::new(0.0, 2.0, 0.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Ceiling".to_string()),
+            UIObject::new(0.0, -2.0, 0.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Floor".to_string()),
+            UIObject::new(-2.0, 0.0, 0.0, 0.0, rc_ui_spectrum_reflective_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left wall".to_string()),
+            UIObject::new(2.0, 0.0, 0.0, 0.0, rc_ui_spectrum_reflective_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right wall".to_string()),
+            UIObject::new(0.5, -0.75, -0.5, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 0.5, 0.5, 0.0, 1.0, 0.0), "Right front box".to_string()),
+            UIObject::new(-0.5, -0.4, 0.5, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 1.2, 0.5, 0.0, -0.5, 0.0), "Left back box".to_string()),
         ];
 
         let spectra = vec![
@@ -1608,10 +1608,10 @@ impl Default for UIFields {
         let spectrum_white = Rc::new(RefCell::new(spectrum_white));
 
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, true, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 30.0), "Left mirror".to_string()),
-            UIObject::new(0.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Left sphere".to_string()),
-            UIObject::new(1.0, 0.0, 1.0, false, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Right sphere".to_string()),
-            UIObject::new(0.0, -1.0, 0.0, false, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0), "Floor".to_string()),
+            UIObject::new(-1.5, 0.0, 1.0, 1.0, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 30.0), "Left mirror".to_string()),
+            UIObject::new(0.0, 0.0, 1.0, 0.0, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Left sphere".to_string()),
+            UIObject::new(1.0, 0.0, 1.0, 0.0, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Right sphere".to_string()),
+            UIObject::new(0.0, -1.0, 0.0, 0.0, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0), "Floor".to_string()),
         ];
 
         let spectra = vec![
@@ -1891,7 +1891,7 @@ struct UIObject {
     pos_x: f32,
     pos_y: f32,
     pos_z: f32,
-    metallicness: bool, 
+    metallicness: f32, 
     spectrum: Rc<RefCell<UISpectrum>>,
     ui_object_type: UIObjectType,
     name: String,
@@ -1900,7 +1900,7 @@ struct UIObject {
 }
 
 impl UIObject {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: bool, spectrum: Rc<RefCell<UISpectrum>>, ui_object_type: UIObjectType, name: String) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: f32, spectrum: Rc<RefCell<UISpectrum>>, ui_object_type: UIObjectType, name: String) -> Self {
         Self {
             pos_x,
             pos_y,
@@ -1939,7 +1939,7 @@ impl UIObject {
             pos_x: 0.0,
             pos_y: 0.0,
             pos_z: 0.0,
-            metallicness: false,
+            metallicness: 0.0,
             spectrum,
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
             name: "New Object".to_string(),
@@ -2138,7 +2138,6 @@ fn reduce_action_list(action_list: &mut Vec<AppActions>) {
 
 //TODO undo redo stack for actions such as creating new elements or deleting old ones
 //TODO the entire UI could use an overhaul
-//TODO way to disable an object without actually deleting it
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { //UI is defined here
         //Top Menu bar (File, Edit, ...)

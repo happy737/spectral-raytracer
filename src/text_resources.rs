@@ -31,7 +31,7 @@ pub const OBJECT_POSITION_TOOLTIP: &str = "The position of the object in the sce
     is defined as the point of the object where its local coordinates (0, 0) land.";
 pub const OBJECT_METALLICNESS_TOOLTIP: &str = "The metallicness of the material of the object. \
     A metallic object is reflective like a mirror, whereas a non metallic object is reflective like \
-    a simple piece of plastic"; 
+    a simple piece of plastic. A value of 1 indicates fully metallic, 0 fully diffuse."; 
 pub const OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP: &str = "The width, height and depth of an \
     axis-aligned box."; 
 pub const OBJECT_SPHERE_RADIUS_TOOLTIP: &str = "The radius of the sphere.";
