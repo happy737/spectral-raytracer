@@ -1,5 +1,6 @@
 use std::ops::{AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign};
 use nalgebra::{Matrix3, Vector3};
+use crate::{SpectrumEffectType, UISpectrum};
 
 pub const VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND: f32 = 380.0;
 pub const VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND: f32 = 780.0;
@@ -214,6 +215,15 @@ impl Spectrum {
         
         for i in 0..self.nbr_of_samples {
             self.intensities[i] = self.intensities[i].max(0.0);
+        }
+    }
+    
+    /// Modifies the inner intensities to each be at most 1.0. 
+    pub fn min1(&mut self) {
+        assert_eq!(self.nbr_of_samples % 8, 0);
+        
+        for i in 0..self.nbr_of_samples {
+            self.intensities[i] = self.intensities[i].min(1.0);
         }
     }
 
@@ -463,6 +473,16 @@ impl DivAssign<f32> for &mut Spectrum {
         for i in 0..self.nbr_of_samples {
             self.intensities[i] /= rhs;
         }
+    }
+}
+
+impl From<&UISpectrum> for Spectrum {
+    fn from(value: &UISpectrum) -> Self {
+        let mut inner_spectrum = value.spectrum;
+        if value.spectrum_effect_type == SpectrumEffectType::Reflective {
+            inner_spectrum.min1();
+        }
+        inner_spectrum
     }
 }
 

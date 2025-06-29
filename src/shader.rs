@@ -245,7 +245,7 @@ pub struct Material {
 impl From<&UIMaterial> for Material {
     fn from(value: &UIMaterial) -> Self {
         Self {
-            reflective_spectrum: value.spectrum.borrow().spectrum,
+            reflective_spectrum: (&*value.spectrum.borrow()).into(),
             metallicness: value.metallicness,
         }
     }
