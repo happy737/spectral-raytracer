@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 use std::sync::Arc;
 use nalgebra::{point, vector, Const, OMatrix, OPoint, Point3, Rotation3, Vector3};
-use crate::{UICamera, UILight, UIObject, UIObjectType};
+use crate::{UICamera, UILight, UIMaterial, UIObject, UIObjectType};
 use crate::spectrum::Spectrum;
 
 pub(crate) const F32_DELTA: f32 = 0.00001;
@@ -93,21 +93,19 @@ pub(crate) struct Aabb {
     min: Point3<f32>,
     max: Point3<f32>,
     aabb_type: AABBType,
-    reflective_spectrum: Spectrum,
-    metallicness: f32,
-}   //TODO refactor material info into single struct "material"
+    material: Material,
+}
 impl Aabb {
-    pub fn new_sphere(center: &Point3<f32>, radius: f32, spectrum: Spectrum, metallicness: f32) -> Aabb {
+    pub fn new_sphere(center: &Point3<f32>, radius: f32, material: Material) -> Aabb {
         Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
             max: point![center.x + radius, center.y + radius, center.z + radius],
             aabb_type: AABBType::Sphere,
-            reflective_spectrum: spectrum,
-            metallicness,
+            material,
         }
     }
     
-    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, spectrum: Spectrum, metallicness: f32) -> Aabb {
+    pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, material: Material) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
         let z_half = z_length / 2.0;
@@ -115,12 +113,11 @@ impl Aabb {
             min: point![center.x - x_half, center.y - y_half, center.z - z_half],
             max: point![center.x + x_half, center.y + y_half, center.z + z_half],
             aabb_type: AABBType::PlainBox,
-            reflective_spectrum: spectrum,
-            metallicness,
+            material, 
         }
     }
     
-    pub fn new_rotated_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, rotation: Rotation3<f32>, reflective_spectrum: Spectrum, metallicness: f32) -> Aabb {
+    pub fn new_rotated_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, rotation: Rotation3<f32>, material: Material) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
         let z_half = z_length / 2.0;
@@ -150,8 +147,7 @@ impl Aabb {
             min, 
             max,
             aabb_type: AABBType::RotatedBox(*center, vector![x_length, y_length, z_length], rotation),
-            reflective_spectrum,
-            metallicness,
+            material,
         }
     }
 }
@@ -166,15 +162,14 @@ impl From<&UIObject> for Aabb {
         let pos = point![value.pos_x, value.pos_y, value.pos_z];
         match value.ui_object_type {
             UIObjectType::PlainBox(x_length, y_length, z_length) => {
-                Aabb::new_box(&pos, x_length, y_length, z_length, value.spectrum.borrow().spectrum, value.metallicness)
+                Aabb::new_box(&pos, x_length, y_length, z_length, (&*value.material.borrow()).into())
             }
             UIObjectType::Sphere(radius) => {
-                Aabb::new_sphere(&pos, radius, value.spectrum.borrow().spectrum, value.metallicness)
+                Aabb::new_sphere(&pos, radius, (&*value.material.borrow()).into())
             }
             UIObjectType::RotatedBox(x_length, y_length, z_length, x_rotation, y_rotation, z_rotation) => {
                 let rotation = Rotation3::from_euler_angles(x_rotation, y_rotation, z_rotation);
-                
-                Aabb::new_rotated_box(&pos, x_length, y_length, z_length, rotation, value.spectrum.borrow().spectrum, value.metallicness)
+                Aabb::new_rotated_box(&pos, x_length, y_length, z_length, rotation, (&*value.material.borrow()).into())
             }
         }
     }
@@ -238,6 +233,21 @@ impl From<&UICamera> for Camera {
                 ui_camera.up_z,
             ],
             ui_camera.fov_deg_y)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Material {
+    reflective_spectrum: Spectrum,
+    metallicness: f32,
+}
+
+impl From<&UIMaterial> for Material {
+    fn from(value: &UIMaterial) -> Self {
+        Self {
+            reflective_spectrum: value.spectrum.borrow().spectrum,
+            metallicness: value.metallicness,
+        }
     }
 }
 
@@ -362,7 +372,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         random_pcg3d(ray.original_pixel_pos.x, ray.original_pixel_pos.y, 
                      uniforms.frame_id + ray.max_bounces);
     
-    if random_z < aabb.metallicness {  //TODO metallic rays cannot yet detect light sources
+    if random_z < aabb.material.metallicness {  //TODO metallic rays cannot yet detect light sources
         if ray.max_bounces > 1 {
             let direction = reflect_vec(&ray.direction, &normal);
             let mut new_ray = Ray::new(new_shot_rays_pos, direction, 
@@ -409,7 +419,7 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         }
     }
     
-    ray.spectrum = &aabb.reflective_spectrum * &received_spectrum;
+    ray.spectrum = &aabb.material.reflective_spectrum * &received_spectrum;
 }
 
 /// The miss shader. It is called on a submitted ray if this ray does ultimately not hit anything. 

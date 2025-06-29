@@ -29,17 +29,13 @@ pub const OBJECT_TYPE_TOOLTIP: &str = "The type of the object. The type determin
     collision detection speed. Having many complex types may drastically lower rendering speed."; 
 pub const OBJECT_POSITION_TOOLTIP: &str = "The position of the object in the scene. The position \
     is defined as the point of the object where its local coordinates (0, 0) land.";
-pub const OBJECT_METALLICNESS_TOOLTIP: &str = "The metallicness of the material of the object. \
-    A metallic object is reflective like a mirror, whereas a non metallic object is reflective like \
-    a simple piece of plastic. A value of 1 indicates fully metallic, 0 fully diffuse."; 
 pub const OBJECT_PLAIN_BOX_DIMENSIONS_TOOLTIP: &str = "The width, height and depth of an \
     axis-aligned box."; 
 pub const OBJECT_SPHERE_RADIUS_TOOLTIP: &str = "The radius of the sphere.";
 pub const LIGHT_SPECTRUM_TOOLTIP: &str = "The spectrum emitted by this light source. Individual \
     spectra can be adjusted in their respective tab.";
-pub const OBJECT_SPECTRUM_REFLECTING_TOOLTIP: &str = "The spectrum reflected by the object. Each \
-    sample value is the share of this wavelength that is reflected. A spectrum of only 1 will \
-    fully reflect every wavelength, essentially a perfectly white body.";
+pub const OBJECT_MATERIAL_TOOLTIP: &str = "The material of the object. This describes the way the \
+    object will look like when rendered.";
 pub const OBJECT_TYPE_PLAIN_BOX_TOOLTIP: &str = "The simplest shape, a simple box. This box can be \
     stretched and moved. It can, however, not be rotated, it is always axis-aligned. This shape is \
     the fastest to compute.";
@@ -97,6 +93,12 @@ pub const REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP: &str = "Check this box if 
     comparable color. The to-be-reflected spectrum will be brightened or dimmed sufficiently \
     to show a bright color, which can then accurately portray the changed brightness after it has \
     been reflected.";
+pub const MATERIAL_METALLICNESS_TOOLTIP: &str = "The metallicness of the material. \
+    A metallic object is reflective like a mirror, whereas a non metallic object is reflective like \
+    a simple piece of plastic. A value of 1 indicates fully metallic, 0 fully diffuse.";
+pub const MATERIAL_SPECTRUM_REFLECTING_TOOLTIP: &str = "The spectrum reflected by the material. Each \
+    sample value is the share of this wavelength that is reflected. A spectrum of only 1 will \
+    fully reflect every wavelength, essentially a perfectly white body.";
 
 
 //display

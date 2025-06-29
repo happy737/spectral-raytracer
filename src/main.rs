@@ -19,7 +19,7 @@ use eframe::egui;
 use eframe::egui::{menu, Color32, ComboBox, IconData, Sense, TextEdit, TopBottomPanel, Ui, UiBuilder};
 use eframe::epaint::Vec2;
 use image::DynamicImage;
-use log::{error, info, warn};
+use log::{error, warn};
 use nalgebra::Vector3;
 use threadpool::ThreadPool;
 use crate::shader::{PixelPos, RaytracingUniforms};
@@ -404,6 +404,18 @@ impl App {
                 }
             }).response.on_hover_text(tool_tip);
     }
+
+    /// Displays a [ComboBox] which lists all the available materials. 
+    fn display_combobox_with_material_list(materials: &mut [Rc<RefCell<UIMaterial>>], ui: &mut Ui, id_salt: String,
+                                           selected_text: String, tool_tip: &str, current_material: &mut Rc<RefCell<UIMaterial>>) {
+        ComboBox::new(id_salt, "")
+            .selected_text(selected_text)
+            .show_ui(ui, |ui| {
+                for material in materials {
+                    ui.selectable_value(current_material, material.clone(), material.borrow().to_string());
+                }
+        }).response.on_hover_text(tool_tip);
+    }
     
     /// Shortcut function to display the settings for a single Object in the scene. The settings 
     /// can be changed and the updated values will be used in the rendering process. Each object is 
@@ -488,13 +500,6 @@ impl App {
             if pos_z_string.parse::<f32>().is_ok() {
                 object.pos_z = pos_z_string.parse::<f32>().unwrap();
             }
-        });
-        
-        //metallicness
-        ui.horizontal_top(|ui| {
-            ui.label("Metallicness:").on_hover_text(OBJECT_METALLICNESS_TOOLTIP);
-            let slider = egui::Slider::new(&mut object.metallicness, 0.0..=1.0);
-            ui.add(slider);
         });
         
         //type specific information
@@ -617,28 +622,29 @@ impl App {
                 });
             }
         }
-
-        //reflecting spectrum
+        
+        //material selection
         ui.horizontal_top(|ui| {
-            let label_color = if !self.ui_values.spectra.contains(&object.spectrum) && is_time_even() {
+            let label_color = if !self.ui_values.materials.contains(&object.material) && is_time_even() {
                 Color32::RED
             } else {
                 Color32::DARK_GRAY
             };
-            ui.colored_label(label_color, "Reflecting factor Spectrum:").on_hover_text(OBJECT_SPECTRUM_REFLECTING_TOOLTIP);
+            ui.colored_label(label_color, "Material:").on_hover_text(OBJECT_MATERIAL_TOOLTIP);
             
-            let borrow = object.spectrum.borrow();
-            let selected_text = borrow.to_string();
-            drop(borrow);
-
-            Self::display_combobox_with_spectrum_list(
-                &mut self.ui_values.spectra,
-                ui,
-                format!("object reflecting {index} spectrum"),
+            let selected_text = {
+                let borrow = object.material.borrow();
+                borrow.to_string()
+            };
+            
+            Self::display_combobox_with_material_list(
+                &mut self.ui_values.materials,
+                ui, 
+                format!("object {index} material"),
                 selected_text,
-                OBJECT_SPECTRUM_REFLECTING_TOOLTIP,
-                &mut object.spectrum,
-            )
+                OBJECT_MATERIAL_TOOLTIP,
+                &mut object.material,
+            );
         });
     }
 
@@ -1064,6 +1070,60 @@ impl App {
         }
 
     }
+    
+    /// Displays the settings for a single material. 
+    fn display_material_settings(&mut self, ui: &mut Ui, index: usize) {
+        let ui_material = &mut self.ui_values.materials[index];
+        let mut ui_material = ui_material.borrow_mut();
+        
+        //name and delete button
+        ui.horizontal_top(|ui| {
+            //name
+            //moving out the bool since multiple mutable access are not allowed for Ref<_>. 
+            let mut editing_name = ui_material.editing_name;
+            let backup_name = &format!("Spectrum {}", index);
+            display_name_with_edit(ui, &mut ui_material.name, backup_name, &mut editing_name);
+            ui_material.editing_name = editing_name;
+
+            ui.add_space(80.0);
+
+            let delete_button = egui::widgets::Button::new("Delete this Material").fill(Color32::LIGHT_RED);
+            if ui.add(delete_button).clicked() {
+                self.ui_values.after_ui_action = Some(AfterUIActions::DeleteMaterial(index));
+            }
+        });
+        
+        //metallicness
+        ui.horizontal_top(|ui| {
+            ui.label("Metallicness:").on_hover_text(MATERIAL_METALLICNESS_TOOLTIP);
+            let slider = egui::Slider::new(&mut ui_material.metallicness, 0.0..=1.0);
+            ui.add(slider);
+        });
+        
+        //reflective spectrum
+        ui.horizontal_top(|ui| {
+            let label_color = if !self.ui_values.spectra.contains(&ui_material.spectrum) && is_time_even() {
+                Color32::RED
+            } else {
+                Color32::DARK_GRAY
+            };
+            ui.colored_label(label_color, "Reflecting Spectrum:").on_hover_text(MATERIAL_SPECTRUM_REFLECTING_TOOLTIP);
+            
+            let selected_text = {
+                let borrow = ui_material.spectrum.borrow();
+                borrow.to_string()
+            };
+        
+            Self::display_combobox_with_spectrum_list(
+                &mut self.ui_values.spectra,
+                ui,
+                format!("material reflecting {index} spectrum"),
+                selected_text,
+                MATERIAL_SPECTRUM_REFLECTING_TOOLTIP,
+                &mut ui_material.spectrum,
+            )
+        });
+    }
 
     /// Displays a single tab for the UITabs up top.
     fn display_tab_frame(&mut self, ui: &mut Ui, label: &str, color: Color32, tab: UiTab) {
@@ -1185,8 +1245,8 @@ impl App {
         let button_render =  egui::Button::new("Start generating image");
         let enabled = self.check_render_legality(); //disable button when rendering would crash
         if ui.add_enabled(enabled, button_render)
-            .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
-            .clicked() {
+                .on_disabled_hover_text(DISPLAY_START_RENDERING_BUTTON_DISABLED_TOOLTIP)
+                .clicked() {
             self.dispatch_render();
         }
     }
@@ -1384,8 +1444,8 @@ impl App {
     /// return false if an error exists which will make the renderer crash. 
     fn check_render_legality(&self) -> bool {
         let lights_ok = self.check_lights_legality();
-
         let objects_ok = self.check_objects_legality();
+        let materials_ok = self.check_materials_legality();
 
         let ui_sample_nbr = self.ui_values.spectrum_number_of_samples;
         let spectra_ok = self.ui_values.spectra.iter()
@@ -1394,7 +1454,7 @@ impl App {
 
         let not_currently_rendering = !*self.currently_rendering.lock().unwrap();
 
-        lights_ok && objects_ok && spectra_ok && not_currently_rendering
+        lights_ok && objects_ok && spectra_ok && materials_ok && not_currently_rendering
     }
 
     /// Checks if all [UILights](UILight) are in order. Returns false if the rendering process
@@ -1405,11 +1465,18 @@ impl App {
             .all(|b| b)
     }
 
-    /// Checks if all [UIObjects](UIObject) are in order. Returns false if the rendering process
-    /// would fail.
+    /// Checks if all [UIObjects](UIObject) have materials which are in the official lists. 
     fn check_objects_legality(&self) -> bool {
         self.ui_values.ui_objects.iter()
-            .map(|o| self.ui_values.spectra.contains(&o.spectrum))
+            .map(|o| self.ui_values.materials.contains(&o.material))
+            .all(|b| b)
+    }
+    
+    /// Checks if all [UIMaterials](UIMaterial) have spectra in their materials, which are in the 
+    /// official lists. 
+    fn check_materials_legality(&self) -> bool {
+        self.ui_values.materials.iter()
+            .map(|o| self.ui_values.spectra.contains(&o.borrow().spectrum))
             .all(|b| b)
     }
 }
@@ -1452,6 +1519,7 @@ struct UIFields {
     ui_objects: Vec<UIObject>,
     progress_bar_progress: f32,
     spectra: Vec<Rc<RefCell<UISpectrum>>>,
+    materials: Vec<Rc<RefCell<UIMaterial>>>,
     spectrum_lower_bound: f32,
     spectrum_upper_bound: f32,
     spectrum_number_of_samples: usize,
@@ -1524,15 +1592,22 @@ impl UIFields {
             spectrum_reflective_green,
         );
         let rc_ui_spectrum_reflective_green = Rc::from(RefCell::from(ui_spectrum_reflective_green));
+        
+        let material_grey = UIMaterial::new(0.0, rc_ui_spectrum_reflective_grey.clone(), "Grey plastic".into());
+        let material_grey = Rc::new(RefCell::new(material_grey));
+        let material_green = UIMaterial::new(0.0, rc_ui_spectrum_reflective_green.clone(), "Green plastic".into());
+        let material_green = Rc::new(RefCell::new(material_green));
+        let material_red = UIMaterial::new(0.0, rc_ui_spectrum_reflective_red.clone(), "Red plastic".into());
+        let material_red = Rc::new(RefCell::new(material_red));
 
         let ui_objects = vec![
-            UIObject::new(0.0, 0.0, 2.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central wall".to_string()),
-            UIObject::new(0.0, 2.0, 0.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Ceiling".to_string()),
-            UIObject::new(0.0, -2.0, 0.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Floor".to_string()),
-            UIObject::new(-2.0, 0.0, 0.0, 0.0, rc_ui_spectrum_reflective_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left wall".to_string()),
-            UIObject::new(2.0, 0.0, 0.0, 0.0, rc_ui_spectrum_reflective_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right wall".to_string()),
-            UIObject::new(0.5, -0.75, -0.5, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 0.5, 0.5, 0.0, 1.0, 0.0), "Right front box".to_string()),
-            UIObject::new(-0.5, -0.4, 0.5, 0.0, rc_ui_spectrum_reflective_grey.clone(), UIObjectType::RotatedBox(0.5, 1.2, 0.5, 0.0, -0.5, 0.0), "Left back box".to_string()),
+            UIObject::new(0.0, 0.0, 2.0, material_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Central wall".to_string()),
+            UIObject::new(0.0, 2.0, 0.0, material_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Ceiling".to_string()),
+            UIObject::new(0.0, -2.0, 0.0, material_grey.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Floor".to_string()),
+            UIObject::new(-2.0, 0.0, 0.0, material_red.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Left wall".to_string()),
+            UIObject::new(2.0, 0.0, 0.0, material_green.clone(), UIObjectType::PlainBox(2.0, 2.0, 2.0), "Right wall".to_string()),
+            UIObject::new(0.5, -0.75, -0.5, material_grey.clone(), UIObjectType::RotatedBox(0.5, 0.5, 0.5, 0.0, 1.0, 0.0), "Right front box".to_string()),
+            UIObject::new(-0.5, -0.4, 0.5, material_grey.clone(), UIObjectType::RotatedBox(0.5, 1.2, 0.5, 0.0, -0.5, 0.0), "Left back box".to_string()),
         ];
 
         let spectra = vec![
@@ -1542,10 +1617,17 @@ impl UIFields {
             rc_ui_spectrum_reflective_red,
             rc_ui_spectrum_reflective_green,
         ];
+        
+        let materials = vec![
+            material_grey,
+            material_green,
+            material_red,
+        ];
 
         self.ui_lights = ui_lights;
         self.ui_objects = ui_objects;
         self.spectra = spectra;
+        self.materials = materials;
         self.ui_camera = UICamera::default();
     }
 }
@@ -1611,12 +1693,17 @@ impl Default for UIFields {
             spectrum_white,
         );
         let spectrum_white = Rc::new(RefCell::new(spectrum_white));
+        
+        let material_mirror = UIMaterial::new(1.0, spectrum_white.clone(), "Perfect Mirror".to_string());
+        let material_mirror = Rc::new(RefCell::new(material_mirror));
+        let material_grey = UIMaterial::new(0.0, spectrum_grey.clone(), "Grey plastic".to_string());
+        let material_grey = Rc::new(RefCell::new(material_grey));
 
         let ui_objects = vec![
-            UIObject::new(-1.5, 0.0, 1.0, 1.0, spectrum_white.clone(), UIObjectType::PlainBox(0.25, 3.0, 30.0), "Left mirror".to_string()),
-            UIObject::new(0.0, 0.0, 1.0, 0.0, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Left sphere".to_string()),
-            UIObject::new(1.0, 0.0, 1.0, 0.0, spectrum_grey.clone(), UIObjectType::Sphere(1.0), "Right sphere".to_string()),
-            UIObject::new(0.0, -1.0, 0.0, 0.0, spectrum_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0), "Floor".to_string()),
+            UIObject::new(-1.5, 0.0, 1.0, material_mirror.clone(), UIObjectType::PlainBox(0.25, 3.0, 30.0), "Left mirror".to_string()),
+            UIObject::new(0.0, 0.0, 1.0, material_grey.clone(), UIObjectType::Sphere(1.0), "Left sphere".to_string()),
+            UIObject::new(1.0, 0.0, 1.0, material_grey.clone(), UIObjectType::Sphere(1.0), "Right sphere".to_string()),
+            UIObject::new(0.0, -1.0, 0.0, material_grey.clone(), UIObjectType::PlainBox(50.0, 0.1, 50.0), "Floor".to_string()),
         ];
 
         let spectra = vec![
@@ -1625,6 +1712,11 @@ impl Default for UIFields {
 
             spectrum_grey,
             spectrum_white,
+        ];
+        
+        let materials = vec![
+            material_mirror,
+            material_grey,
         ];
         
         let normalized_white_spectrum = Spectrum::new_normalized_white(
@@ -1649,6 +1741,7 @@ impl Default for UIFields {
             ui_objects,
             progress_bar_progress: 0.0,
             spectra,
+            materials,
             spectrum_lower_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_LOWER_BOUND,
             spectrum_upper_bound: spectrum::VISIBLE_LIGHT_WAVELENGTH_UPPER_BOUND,
             spectrum_number_of_samples: NBR_OF_SPECTRUM_SAMPLES_DEFAULT,
@@ -1896,8 +1989,7 @@ struct UIObject {
     pos_x: f32,
     pos_y: f32,
     pos_z: f32,
-    metallicness: f32,
-    spectrum: Rc<RefCell<UISpectrum>>,
+    material: Rc<RefCell<UIMaterial>>,
     ui_object_type: UIObjectType,
     name: String,
     editing_name: bool,
@@ -1905,13 +1997,12 @@ struct UIObject {
 }
 
 impl UIObject {
-    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, metallicness: f32, spectrum: Rc<RefCell<UISpectrum>>, ui_object_type: UIObjectType, name: String) -> Self {
+    pub fn new(pos_x: f32, pos_y: f32, pos_z: f32, material: Rc<RefCell<UIMaterial>>, ui_object_type: UIObjectType, name: String) -> Self {
         Self {
             pos_x,
             pos_y,
             pos_z,
-            metallicness, 
-            spectrum,
+            material, 
             ui_object_type,
             name,
             editing_name: false,
@@ -1919,33 +2010,23 @@ impl UIObject {
         }
     }
 
-    /// Generates a simple box as a default object which the user can then edit.
-    pub fn default(app: &App) -> Self {
-        let spectrum = match app.get_first_reflective_spectrum_or_first_general() {
-            Some(spec_ref) => {
-                spec_ref
-            }
-            None => {
-                let plain_spectrum = Spectrum::new_singular_reflectance_factor(
-                    app.ui_values.spectrum_lower_bound,
-                    app.ui_values.spectrum_upper_bound,
-                    app.ui_values.spectrum_number_of_samples,
-                    0.7);
-                Rc::new(RefCell::new(UISpectrum::new(
-                    "REPLACE ME".to_string(),
-                    UISpectrumType::PlainReflective(0.7),
-                    SpectrumEffectType::Reflective,
-                    plain_spectrum,
-                )))
-            }
+    /// Generates a simple box as a default object which the user can then edit. Will use the 
+    /// first material in the app. If no material exists, generates a new one, inserts it into the 
+    /// app and then uses it. 
+    pub fn default(app: &mut App) -> Self {
+        let material = if let Some(material) = app.ui_values.materials.first() {
+            material.clone()
+        } else {
+            let default_material = Rc::new(RefCell::new(UIMaterial::default(app)));
+            app.ui_values.materials.push(default_material.clone());
+            default_material
         };
 
         Self {
             pos_x: 0.0,
             pos_y: 0.0,
             pos_z: 0.0,
-            metallicness: 0.0,
-            spectrum,
+            material,
             ui_object_type: UIObjectType::PlainBox(2.0, 2.0, 2.0),
             name: "New Object".to_string(),
             editing_name: false,
@@ -1960,8 +2041,7 @@ impl Clone for UIObject {
             pos_x: self.pos_x,
             pos_y: self.pos_y,
             pos_z: self.pos_z,
-            metallicness: self.metallicness,
-            spectrum: self.spectrum.clone(),
+            material: self.material.clone(),
             ui_object_type: self.ui_object_type,
             name: self.name.clone(),
             editing_name: false,
@@ -2006,6 +2086,79 @@ impl UIObjectType {
     }
 }
 
+struct UIMaterial {
+    metallicness: f32, 
+    spectrum: Rc<RefCell<UISpectrum>>,
+    name: String,
+    id: u32, 
+    editing_name: bool,
+}
+
+impl UIMaterial {
+    fn new(metallicness: f32, spectrum: Rc<RefCell<UISpectrum>>, name: String) -> Self {
+        UIMaterial {
+            metallicness,
+            spectrum,
+            name,
+            id: get_id(),
+            editing_name: false,
+        }
+    }
+    
+    fn default(app: &App) -> Self {
+        let spectrum = match app.get_first_reflective_spectrum_or_first_general() {
+            Some(spec_ref) => {
+                spec_ref
+            }
+            None => {
+                let plain_spectrum = Spectrum::new_singular_reflectance_factor(
+                    app.ui_values.spectrum_lower_bound,
+                    app.ui_values.spectrum_upper_bound,
+                    app.ui_values.spectrum_number_of_samples,
+                    0.7);
+                Rc::new(RefCell::new(UISpectrum::new(
+                    "REPLACE ME".to_string(),
+                    UISpectrumType::PlainReflective(0.7),
+                    SpectrumEffectType::Reflective,
+                    plain_spectrum,
+                )))
+            }
+        };
+        
+        Self {
+            metallicness: 0.0,
+            spectrum,
+            name: "New Material".to_string(),
+            id: get_id(),
+            editing_name: false,
+        }
+    }
+}
+
+impl Clone for UIMaterial {
+    fn clone(&self) -> Self {
+        Self {
+            metallicness: self.metallicness,
+            spectrum: self.spectrum.clone(),
+            name: self.name.clone(),
+            id: get_id(),
+            editing_name: false,
+        }
+    }
+}
+
+impl PartialEq for UIMaterial {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Display for UIMaterial {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 /// This enum differentiates which tab is currently displayed in the apps main content window.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum UiTab {
@@ -2023,10 +2176,11 @@ enum AfterUIActions {
     SaveSelectedSpectrum(usize),
     DeleteSpectrum(usize),
     UpdateSelectedSpectrum(usize),
-    DeselectSelectedSpectrum,
     CopySpectrum(usize),
     CopyLight(usize),
     CopyObject(usize),
+    DeleteMaterial(usize),
+    CopyMaterial(usize),
 }
 
 /// An enum to send messages from the UI thread over to the currently rendering thread.
@@ -2322,7 +2476,7 @@ impl eframe::App for App {
                                 });
                                 ui.add_space(10.0);
 
-                                //name and add button
+                                //name and add button: spectra
                                 ui.horizontal_top(|ui| {
                                     ui.label("Spectra:");
                                     ui.add_space(100.0);
@@ -2371,7 +2525,32 @@ impl eframe::App for App {
                                     });
                                 }
                                 ui.add_space(10.0);
-                                //TODO material settings
+                                
+                                //name and add button: materials
+                                ui.horizontal_top(|ui| {
+                                    ui.label("Materials:");
+                                    ui.add_space(100.0);
+                                    if ui.button("Add new Material").clicked() {
+                                        let material = UIMaterial::default(self);
+                                        self.ui_values.materials.push(
+                                            Rc::new(RefCell::new(material))
+                                        );
+                                    }
+                                });
+                                
+                                //individual materials
+                                for index in 0..self.ui_values.materials.len() {
+                                    //add actual spectrum UI elements
+                                    ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+                                        egui::Frame::NONE.fill(Color32::LIGHT_GRAY).inner_margin(5.0).show(ui, |ui| {
+                                            self.display_material_settings(ui, index);
+                                        });
+                                    }).response.context_menu(|ui| {
+                                        if ui.button("Copy").clicked() {
+                                            self.ui_values.after_ui_action = Some(AfterUIActions::CopyMaterial(index));
+                                        }
+                                    });
+                                }
                             });
                         });
 
@@ -2453,9 +2632,6 @@ impl eframe::App for App {
                 AfterUIActions::UpdateSelectedSpectrum(index) => {
                     self.update_selected_spectrum(index);
                 }
-                AfterUIActions::DeselectSelectedSpectrum => {
-                    self.ui_values.selected_spectrum = None;
-                }
                 AfterUIActions::CopySpectrum(index) => {
                     let mut new_ui_spectrum = self.ui_values.spectra[index].borrow().clone();
                     new_ui_spectrum.name += COPIED_ELEMENT_NAME_INDICATOR;
@@ -2470,6 +2646,14 @@ impl eframe::App for App {
                     let mut new_ui_object = self.ui_values.ui_objects[index].clone();
                     new_ui_object.name += COPIED_ELEMENT_NAME_INDICATOR;
                     self.ui_values.ui_objects.insert(index + 1, new_ui_object);
+                }
+                AfterUIActions::DeleteMaterial(index) => {
+                    self.ui_values.materials.remove(index);
+                }
+                AfterUIActions::CopyMaterial(index) => {
+                    let mut new_ui_material = self.ui_values.materials[index].borrow().clone();
+                    new_ui_material.name += COPIED_ELEMENT_NAME_INDICATOR;
+                    self.ui_values.materials.insert(index + 1, Rc::new(RefCell::new(new_ui_material)));
                 }
             }
         }
