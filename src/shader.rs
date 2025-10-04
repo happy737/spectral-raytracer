@@ -650,19 +650,19 @@ fn hammersley(n: u32, capital_n: u32) -> (f32, f32) {
 /// <br>
 /// Hash Functions for GPU Rendering, Jarzynski et al. <br>
 /// http://www.jcgt.org/published/0009/03/02/
-fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {    //TODO This function may be improved using simd. Do some testing.
-    x = x * 1664525 + 1013904223;
-    y = y * 1664525 + 1013904223;
-    z = z * 1664525 + 1013904223;
-    x += y * z;
-    y += z * x;
-    z += x * y;
+fn random_pcg3d(mut x: u32, mut y: u32, mut z: u32) -> (f32, f32, f32) {
+    x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+    y = y.wrapping_mul(1664525).wrapping_add(1013904223);
+    z = z.wrapping_mul(1664525).wrapping_add(1013904223);
+    x = y.wrapping_mul(z).wrapping_add(x);
+    y = z.wrapping_mul(x).wrapping_add(y);
+    z = x.wrapping_mul(y).wrapping_add(z);
     x ^= x >> 16;
     y ^= y >> 16;
     z ^= z >> 16;
-    x += y * z;
-    y += z * x;
-    z += x * y;
+    x = y.wrapping_mul(z).wrapping_add(x);
+    y = z.wrapping_mul(x).wrapping_add(y);
+    z = x.wrapping_mul(y).wrapping_add(z);
 
     let reciprocal = 1.0 / 0xffffffffu32 as f32;
     (
