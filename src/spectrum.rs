@@ -129,7 +129,7 @@ impl Spectrum {
             1.0
         );
         
-        let (r, g, b) = unnormalized_white.to_rgb_early();
+        let (r, g, b) = unnormalized_white.get_rgb_early();
         let normalization_factor = r.max(g.max(b));
         unnormalized_white /= normalization_factor;
         
@@ -141,7 +141,8 @@ impl Spectrum {
     pub fn new_reflective_spectrum_red(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
         let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
         let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
-        
+
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..nbr_of_samples {
             let current_wavelength = lowest_wavelength + step * i as f32;
             if 550.0 < current_wavelength {
@@ -157,7 +158,8 @@ impl Spectrum {
     pub fn new_reflective_spectrum_green(lowest_wavelength: f32, highest_wavelength: f32, nbr_of_samples: usize, factor: f32) -> Self {
         let mut arr = [0f32; NBR_OF_SAMPLES_MAX];
         let step = (highest_wavelength - lowest_wavelength) / (nbr_of_samples - 1) as f32;
-        
+
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..nbr_of_samples {
             let current_wavelength = lowest_wavelength + step * i as f32;
             if 500.0 < current_wavelength && current_wavelength < 575.0 {
@@ -233,7 +235,7 @@ impl Spectrum {
     /// The current approach is to convert the wavelengths to XYZ via an official CIE lookup table
     /// and then convert this to RGB. RGB is taken to be Adobes sRGB. <br>
     /// See https://stackoverflow.com/a/51639077 (saved website can be seen in ../research_materials )
-    pub fn to_rgb_early(&self) -> (f32, f32, f32) {
+    pub fn get_rgb_early(&self) -> (f32, f32, f32) {
         match self.spectrum_type {
             SpectrumType::EquidistantSamples(min, max) => {
                 let mut xyz_values: Vec<Vector3<f32>> = Vec::with_capacity(self.nbr_of_samples);
@@ -305,7 +307,7 @@ impl Spectrum {
             self.nbr_of_samples = new_sample_amount;
         } else {    //up sample (linear interpolation)
             let mut new_arr = [0f32; NBR_OF_SAMPLES_MAX];
-            for i in 0..new_sample_amount {
+            for i in 0..new_sample_amount { //explicit index iteration since not the entire array has to be traversed
                 let index = i as f32 / (new_sample_amount - 1) as f32 * (self.nbr_of_samples - 1) as f32;
                 let index_frac = index.fract();
                 let index_lower = index.floor() as usize;
@@ -324,7 +326,7 @@ impl Spectrum {
     
     /// Generates an Iterator which will yield tuples of wavelengths and their respective spectral 
     /// radiance's. 
-    pub fn iter(&self) -> SpectrumIterator {
+    pub fn iter(&'_ self) -> SpectrumIterator<'_> {
         let (lower, upper) = self.get_range();
         let step = (upper - lower) / (self.nbr_of_samples - 1) as f32;
         
@@ -367,7 +369,7 @@ impl Spectrum {
     /// shape of the distribution remains the same, but the resulting RGB values will be in range 
     /// \[0; 1] with the largest being 1. 
     pub fn normalize(&self) -> Spectrum {
-        let (r, g, b) = self.to_rgb_early();
+        let (r, g, b) = self.get_rgb_early();
         let normalize_factor = r.max(g.max(b));
         
         self / normalize_factor
@@ -403,8 +405,9 @@ impl Div<&Spectrum> for &Spectrum {
         assert_eq!(self.nbr_of_samples, rhs.nbr_of_samples);
         assert_eq!(self.nbr_of_samples % 8, 0);
 
-        let mut new_arr = self.intensities.clone();
+        let mut new_arr = self.intensities;
 
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..self.nbr_of_samples {
             new_arr[i] /= rhs.intensities[i];
         }
@@ -420,8 +423,9 @@ impl Mul<&Spectrum> for &Spectrum {
         assert_eq!(self.nbr_of_samples, rhs.nbr_of_samples);
         assert_eq!(self.nbr_of_samples % 8, 0);
 
-        let mut new_arr = self.intensities.clone();
+        let mut new_arr = self.intensities;
 
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..self.nbr_of_samples {
             new_arr[i] *= rhs.intensities[i];
         }
@@ -448,6 +452,7 @@ impl Div<f32> for &Spectrum {
 
         let mut new_arr = self.intensities;
 
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..self.nbr_of_samples {
             new_arr[i] /= rhs;
         }
@@ -459,7 +464,8 @@ impl Div<f32> for &Spectrum {
 impl DivAssign<f32> for Spectrum {
     fn div_assign(&mut self, rhs: f32) {
         assert_eq!(self.nbr_of_samples % 8, 0);
-        
+
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..self.nbr_of_samples {
             self.intensities[i] /= rhs;
         }
@@ -469,7 +475,8 @@ impl DivAssign<f32> for Spectrum {
 impl DivAssign<f32> for &mut Spectrum {
     fn div_assign(&mut self, rhs: f32) {
         assert_eq!(self.nbr_of_samples % 8, 0);
-        
+
+        //explicit index iteration since not the entire array has to be traversed
         for i in 0..self.nbr_of_samples {
             self.intensities[i] /= rhs;
         }
@@ -814,7 +821,7 @@ mod test {
             64,
             1.0,
         );
-        let (r, g, b) = sun.to_rgb_early();
+        let (r, g, b) = sun.get_rgb_early();
         assert!((r - g).abs() < 0.01, "Red ({r}) and green ({g}) too different to be greyscale!");
         assert!((g - b).abs() < 0.01, "Green ({g}) and blue ({b}) too different to be greyscale!");
         assert!((r - b).abs() < 0.01, "Red ({r}) and blue ({b}) too different to be greyscale!");

@@ -895,7 +895,7 @@ impl App {
         match self.ui_values.selected_spectrum.as_mut() {
             Some(selected) => {
                 let spectrum = &mut selected.spectrum;
-                let (r, g, b) = spectrum.to_rgb_early();
+                let (r, g, b) = spectrum.get_rgb_early();
                 
                 ui.horizontal_top(|ui| {
                     ui.colored_label(Color32::RED, "Any changes will not be applied unless saved. Selecting another spectrum will discard changes!");
@@ -1011,7 +1011,7 @@ impl App {
                         
                         //white reflected
                         let reflected_spectrum = &*spectrum * &reflective_base;
-                        let (r, g, b) = reflected_spectrum.to_rgb_early();
+                        let (r, g, b) = reflected_spectrum.get_rgb_early();
 
                         ui.vertical(|ui| {
                             let r_byte = (r.clamp(0.0, 1.0) * 255.0) as u8;
@@ -1449,8 +1449,7 @@ impl App {
 
         let ui_sample_nbr = self.ui_values.spectrum_number_of_samples;
         let spectra_ok = self.ui_values.spectra.iter()
-            .map(|s| s.borrow().spectrum.get_nbr_of_samples() == ui_sample_nbr)
-            .all(|b| b);
+            .all(|s| s.borrow().spectrum.get_nbr_of_samples() == ui_sample_nbr);
 
         let not_currently_rendering = !*self.currently_rendering.lock().unwrap();
 
@@ -1461,23 +1460,20 @@ impl App {
     /// would fail.
     fn check_lights_legality(&self) -> bool {
         self.ui_values.ui_lights.iter()
-            .map(|l| self.ui_values.spectra.contains(&l.spectrum))
-            .all(|b| b)
+            .all(|l| self.ui_values.spectra.contains(&l.spectrum))
     }
 
     /// Checks if all [UIObjects](UIObject) have materials which are in the official lists. 
     fn check_objects_legality(&self) -> bool {
         self.ui_values.ui_objects.iter()
-            .map(|o| self.ui_values.materials.contains(&o.material))
-            .all(|b| b)
+            .all(|o| self.ui_values.materials.contains(&o.material))
     }
     
     /// Checks if all [UIMaterials](UIMaterial) have spectra in their materials, which are in the 
     /// official lists. 
     fn check_materials_legality(&self) -> bool {
         self.ui_values.materials.iter()
-            .map(|o| self.ui_values.spectra.contains(&o.borrow().spectrum))
-            .all(|b| b)
+            .all(|o| self.ui_values.spectra.contains(&o.borrow().spectrum))
     }
 }
 

@@ -286,7 +286,7 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     let mut ray = Ray::new(uniforms.camera.position, dir, uniforms.max_bounces, pos, &uniforms.example_spectrum);
     submit_ray(&mut ray, uniforms);
 
-    ray.spectrum.to_rgb_early()
+    ray.spectrum.get_rgb_early()
     //random_pcg3d(pos.x, pos.y, uniforms.frame_id)
     //TODO dead center in the middle sphere is a big fat aliasing circle
 }
