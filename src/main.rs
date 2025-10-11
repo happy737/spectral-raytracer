@@ -1593,11 +1593,11 @@ impl UIFields {
         );
         let rc_ui_spectrum_reflective_green = Rc::from(RefCell::from(ui_spectrum_reflective_green));
         
-        let material_grey = UIMaterial::new(0.0, rc_ui_spectrum_reflective_grey.clone(), "Grey plastic".into());
+        let material_grey = UIMaterial::new(0.0, 0.0, rc_ui_spectrum_reflective_grey.clone(), "Grey plastic".into());
         let material_grey = Rc::new(RefCell::new(material_grey));
-        let material_green = UIMaterial::new(0.0, rc_ui_spectrum_reflective_green.clone(), "Green plastic".into());
+        let material_green = UIMaterial::new(0.0, 0.0, rc_ui_spectrum_reflective_green.clone(), "Green plastic".into());
         let material_green = Rc::new(RefCell::new(material_green));
-        let material_red = UIMaterial::new(0.0, rc_ui_spectrum_reflective_red.clone(), "Red plastic".into());
+        let material_red = UIMaterial::new(0.0, 0.0, rc_ui_spectrum_reflective_red.clone(), "Red plastic".into());
         let material_red = Rc::new(RefCell::new(material_red));
 
         let ui_objects = vec![
@@ -1694,9 +1694,9 @@ impl Default for UIFields {
         );
         let spectrum_white = Rc::new(RefCell::new(spectrum_white));
         
-        let material_mirror = UIMaterial::new(1.0, spectrum_white.clone(), "Perfect Mirror".to_string());
+        let material_mirror = UIMaterial::new(1.0, 0.2, spectrum_white.clone(), "Perfect Mirror".to_string());
         let material_mirror = Rc::new(RefCell::new(material_mirror));
-        let material_grey = UIMaterial::new(0.0, spectrum_grey.clone(), "Grey plastic".to_string());
+        let material_grey = UIMaterial::new(0.0, 0.0, spectrum_grey.clone(), "Grey plastic".to_string());
         let material_grey = Rc::new(RefCell::new(material_grey));
 
         let ui_objects = vec![
@@ -2087,7 +2087,8 @@ impl UIObjectType {
 }
 
 struct UIMaterial {
-    metallicness: f32, 
+    metallicness: f32,
+    roughness: f32,
     spectrum: Rc<RefCell<UISpectrum>>,
     name: String,
     id: u32, 
@@ -2095,9 +2096,10 @@ struct UIMaterial {
 }
 
 impl UIMaterial {
-    fn new(metallicness: f32, spectrum: Rc<RefCell<UISpectrum>>, name: String) -> Self {
+    fn new(metallicness: f32, roughness: f32, spectrum: Rc<RefCell<UISpectrum>>, name: String) -> Self {
         UIMaterial {
             metallicness,
+            roughness,
             spectrum,
             name,
             id: get_id(),
@@ -2127,6 +2129,7 @@ impl UIMaterial {
         
         Self {
             metallicness: 0.0,
+            roughness: 0.2,
             spectrum,
             name: "New Material".to_string(),
             id: get_id(),
@@ -2139,6 +2142,7 @@ impl Clone for UIMaterial {
     fn clone(&self) -> Self {
         Self {
             metallicness: self.metallicness,
+            roughness: self.roughness,
             spectrum: self.spectrum.clone(),
             name: self.name.clone(),
             id: get_id(),

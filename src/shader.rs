@@ -247,6 +247,7 @@ impl From<&UICamera> for Camera {
 pub struct Material {
     reflective_spectrum: Spectrum,
     metallicness: f32,
+    roughness: f32,
 }
 
 impl From<&UIMaterial> for Material {
@@ -254,6 +255,7 @@ impl From<&UIMaterial> for Material {
         Self {
             reflective_spectrum: (&*value.spectrum.borrow()).into(),
             metallicness: value.metallicness,
+            roughness: value.roughness,
         }
     }
 }
@@ -381,17 +383,25 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
         random_pcg3d(ray.original_pixel_pos.x, ray.original_pixel_pos.y, 
                      uniforms.frame_id + ray.max_bounces);
     
-    if random_z < aabb.material.metallicness {  //TODO metallic rays cannot yet detect light sources
+    if random_z < aabb.material.metallicness {
         //specular reflection
 
         if ray.max_bounces > 1 {
-            let direction = reflect_vec(&ray.direction, &normal);
+            let reflected_direction = reflect_vec(&ray.direction, &normal);
+            let direction = if aabb.material.roughness < 0.001 {
+                reflected_direction
+            } else {
+                sample_in_cone(&reflected_direction, aabb.material.roughness, random_x, random_y)
+            };
             let mut new_ray = Ray::new(new_shot_rays_pos, direction, 
                                        ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);
             submit_ray(&mut new_ray, uniforms);
 
             received_spectrum += &new_ray.spectrum;
-        }   //else just simply black 
+        }
+
+        //TODO direct contributions
+        //TODO metallic rays cannot yet detect light sources
     } else {
         //diffuse reflection
 
