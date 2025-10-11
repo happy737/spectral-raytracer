@@ -96,6 +96,10 @@ pub const REFLECTIVE_SPECTRUM_NORMALIZE_BASE_TOOLTIP: &str = "Check this box if 
 pub const MATERIAL_METALLICNESS_TOOLTIP: &str = "The metallicness of the material. \
     A metallic object is reflective like a mirror, whereas a non metallic object is reflective like \
     a simple piece of plastic. A value of 1 indicates fully metallic, 0 fully diffuse.";
+pub const MATERIAL_ROUGHNESS_TOOLTIP: &str = "The roughness of a material. \
+    It determines how perfect of a mirror, how polished, a metallic object is. Lower values make \
+    a sharper mirror, higher values make it more blurry. A value of 0 skips the blurriness \
+    computation, making the render faster.";
 pub const MATERIAL_SPECTRUM_REFLECTING_TOOLTIP: &str = "The spectrum reflected by the material. Each \
     sample value is the share of this wavelength that is reflected. A spectrum of only 1 will \
     fully reflect every wavelength, essentially a perfectly white body.";

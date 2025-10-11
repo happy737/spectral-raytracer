@@ -1099,6 +1099,13 @@ impl App {
             let slider = egui::Slider::new(&mut ui_material.metallicness, 0.0..=1.0);
             ui.add(slider);
         });
+
+        //roughness
+        ui.horizontal_top(|ui| {
+            ui.label("Roughness:").on_hover_text(MATERIAL_ROUGHNESS_TOOLTIP);
+            let slider = egui::Slider::new(&mut ui_material.roughness, 0.0..=1.0);
+            ui.add(slider);
+        });
         
         //reflective spectrum
         ui.horizontal_top(|ui| {

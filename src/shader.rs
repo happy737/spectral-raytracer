@@ -719,6 +719,10 @@ fn global_space_random_bounce_direction(random_x: f32, random_y: f32, normal: &V
     Rotation3::face_towards(normal, &up) * local_direction
 }
 
+/// Generates a vector, pointing roughly in the same direction as the given original direction,
+/// based on the roughness provided. For a roughness of 0 nothing changes, a roughness of 1
+/// produces a random direction within the semicircle of the original direction. <br>
+/// random_x and random_y must be two random variables in range \[0; 1].
 ///TODO validate this
 fn sample_in_cone(original_direction: &Vector3<f32>, roughness: f32, random_x: f32, random_y: f32) -> Vector3<f32> {
     let theta_max = roughness * roughness * std::f32::consts::FRAC_PI_2;
