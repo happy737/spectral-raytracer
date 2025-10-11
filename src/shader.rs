@@ -96,6 +96,8 @@ pub(crate) struct Aabb {
     material: Material,
 }
 impl Aabb {
+    /// Creates a new sphere object with given center point and radius, as well as given material.
+    /// The sphere is a mathematically perfect sphere and not a polygon approximation.
     pub fn new_sphere(center: &Point3<f32>, radius: f32, material: Material) -> Aabb {
         Aabb {
             min: point![center.x - radius, center.y - radius, center.z - radius],
@@ -104,7 +106,10 @@ impl Aabb {
             material,
         }
     }
-    
+
+    /// Creates a new Axis Aligned Bounding Box at given center with its x, y and z length. This is
+    /// the fastest to compute intersection. As every object is first checked with an AABB and this
+    /// box skips the second intersection check.
     pub fn new_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, material: Material) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
@@ -116,7 +121,9 @@ impl Aabb {
             material, 
         }
     }
-    
+
+    /// Creates a new box, analogous to an AABB, which can however be rotated in any way. No longer
+    /// has skipped intersection check bonus of the AABB.
     pub fn new_rotated_box(center: &Point3<f32>, x_length: f32, y_length: f32, z_length: f32, rotation: Rotation3<f32>, material: Material) -> Aabb {
         let x_half = x_length / 2.0;
         let y_half = y_length / 2.0;
@@ -282,6 +289,7 @@ pub fn ray_generation_shader(pos: PixelPos, dim: Dimensions, uniforms: &Raytraci
     //TODO dead center in the middle sphere is a big fat aliasing circle
 }
 
+/// The intersection shader.
 fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
     match aabb.aabb_type {
         AABBType::Sphere => {
@@ -339,6 +347,7 @@ fn intersection_shader(ray: &Ray, aabb: &Aabb) -> Option<f32> {
     }
 }
 
+/// The closest hit shader.
 fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms: &RaytracingUniforms) {
     ray.hit = true;
     ray.hit_distance = ray_intersection_length;
@@ -373,6 +382,8 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                      uniforms.frame_id + ray.max_bounces);
     
     if random_z < aabb.material.metallicness {  //TODO metallic rays cannot yet detect light sources
+        //specular reflection
+
         if ray.max_bounces > 1 {
             let direction = reflect_vec(&ray.direction, &normal);
             let mut new_ray = Ray::new(new_shot_rays_pos, direction, 
@@ -382,6 +393,8 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
             received_spectrum += &new_ray.spectrum;
         }   //else just simply black 
     } else {
+        //diffuse reflection
+
         //direct light contributions via light sources
         //important: ONLY HERE is the light intensity divided by distance squared, reflected rays
         // have already paid the square tax. 
@@ -694,4 +707,26 @@ fn global_space_random_bounce_direction(random_x: f32, random_y: f32, normal: &V
         up = Vector3::x();
     }
     Rotation3::face_towards(normal, &up) * local_direction
+}
+
+///TODO validate this
+fn sample_in_cone(original_direction: &Vector3<f32>, roughness: f32, random_x: f32, random_y: f32) -> Vector3<f32> {
+    let theta_max = roughness * roughness * std::f32::consts::FRAC_PI_2;
+
+    let cos_theta = (1.0 - random_x) + random_x * theta_max.cos();
+    let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+    let phi = 2.0 * PI * random_y;
+
+    let local_direction = Vector3::new(
+        sin_theta * phi.cos(),
+        sin_theta * phi.sin(),
+        cos_theta,
+    );
+
+    let w = original_direction.normalize();
+    let a = if w.z.abs() < 0.999 {Vector3::z()} else {Vector3::x()};
+    let v = w.cross(&a).normalize();
+    let u = v.cross(&w);
+
+    (u * local_direction.x + v * local_direction.y + w * local_direction.z).normalize()
 }
