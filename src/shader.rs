@@ -7,6 +7,13 @@ use crate::spectrum::Spectrum;
 pub(crate) const F32_DELTA: f32 = 0.00001;
 const NEW_RAY_POSITION_OFFSET_DISTANCE: f32 = 0.00001;
 
+/// The distance a ray has to travel at least when being reflected via specular reflection. If the
+/// normal is not perpendicular to the surface, a high roughness value may result in rays being
+/// shot into the same object directly adjacent. Therefore, any ray shorter than this is being
+/// discarded.
+const SPECULAR_REFLECTION_HIGH_ROUGHNESS_MINIMUM_RAY_DISTANCE: f32 = 0.0001;
+
+
 /// The position of the pixel on the screen. (0, 0) is the top left. 
 #[derive(Copy, Clone)]
 pub struct PixelPos {
@@ -397,7 +404,9 @@ fn hit_shader(ray: &mut Ray, aabb: &Aabb, ray_intersection_length: f32, uniforms
                                        ray.max_bounces - 1, ray.original_pixel_pos, &ray.spectrum);
             submit_ray(&mut new_ray, uniforms);
 
-            received_spectrum += &new_ray.spectrum;
+            if new_ray.hit_distance > SPECULAR_REFLECTION_HIGH_ROUGHNESS_MINIMUM_RAY_DISTANCE {
+                received_spectrum += &new_ray.spectrum;
+            }
         }
 
         //TODO direct contributions
